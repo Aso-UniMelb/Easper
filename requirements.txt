@@ -1,0 +1,29 @@
+# GUI
+customtkinter
+Pillow
+
+# Audio Processing
+pydub
+librosa
+soundfile
+
+# ELAN files
+pympi-ling
+
+# Machine Learning
+scikit-learn
+numpy
+tqdm
+
+# PyTorch (CPU version - use torch with CUDA for GPU support)
+torch==2.8.0
+torchaudio==2.8.0
+
+# Hugging Face / Transformers
+transformers==4.57.3
+huggingface_hub==0.36.0
+
+# Speaker Diarization
+speechbrain==1.0.3
+pyannote.audio==3.4.0
+
