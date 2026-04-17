@@ -23,7 +23,18 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 2. Download the latest `Easper_Setup.exe`.
 3. Run the installer and follow the on-screen instructions.
 
-### Option 2: Manual Installation (Development)
+### Option 2: Using the Setup Script (macOS)
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Aso-UniMelb/Easper.git
+   cd Easper
+   ```
+2. **Run the Setup Script**:
+   ```bash
+   bash macos/setup.sh
+   ```
+
+### Option 3: Manual Installation (Development)
 1. **Install FFmpeg**: Ensure [FFmpeg 7.1.1+](https://ffmpeg.org/download.html) is installed and added to your system `PATH`.
 2. **Install Python**: Python 3.11 or higher is required.
 3. **Clone the Repository**:
@@ -44,6 +55,11 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 Simply run the main script without arguments to launch the graphical interface:
 ```bash
 python src/main.py
+```
+
+**Shortcut (macOS/Linux):**
+```bash
+bash run-macos.sh
 ```
 
 ### ⌨️ Command Line Interface
