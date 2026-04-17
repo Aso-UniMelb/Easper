@@ -1,56 +1,72 @@
-# Easper
-A Portable ASR Workflow for Field Linguists
+# 🎙️ Easper
 
-## Features
+**A Portable ASR Workflow for Field Linguists**
 
-- **Transcriber**: Transcribe audio files to ELAN format with automatic speaker diarization (SpeechBrain or Pyannote)
-- **Dataset Generator**: Create ASR training datasets from ELAN annotated files
-- **Dual Interface**: Use via GUI or command line
+Easper is a specialized tool designed to streamline the Automatic Speech Recognition (ASR) workflow for linguistic fieldwork. It provides a bridge between raw audio recordings and structured ELAN annotations, enabling researchers to quickly transcribe and prepare datasets for language modeling.
 
-## Installation
+---
 
-### Option 1: Using the Installer (Windows Only)
+## ✨ Features
 
-1. Go to Easper Releases
-2. Download `Easper_installer.exe`
-3. Run the installer and follow the instructions
+- **🚀 Automated Transcription**: Convert audio recordings directly into ELAN (.eaf) format.
+- **👥 Speaker Diarization**: Integrated support for SpeechBrain and Pyannote to distinguish between speakers automatically.
+- **📊 Dataset Generation**: Seamlessly create ASR training datasets from existing ELAN annotations.
+- **🖥️ Dual Interface**: Use the intuitive GUI for ease of use or the powerful CLI for automation.
+- **📦 Portable Design**: Designed to be easy to deploy and use in field conditions.
 
-### Option 2: Manual Installation
+---
 
-1. Install FFmpeg 7.1.1 and added to system PATH
-2. Install Python 3.11+
-3. git clone repo
-4. cd Easper
-5. pip install -r requirements.txt
+## 📥 Installation
 
-## Usage
+### Option 1: Using the Installer (Windows Only) - Recommended
+1. Navigate to the [Easper Releases](https://github.com/Aso-UniMelb/Easper/releases).
+2. Download the latest `Easper_Setup.exe`.
+3. Run the installer and follow the on-screen instructions.
 
-### GUI
+### Option 2: Manual Installation (Development)
+1. **Install FFmpeg**: Ensure [FFmpeg 7.1.1+](https://ffmpeg.org/download.html) is installed and added to your system `PATH`.
+2. **Install Python**: Python 3.11 or higher is required.
+3. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Aso-UniMelb/Easper.git
+   cd Easper
+   ```
+4. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-1. Run `python -m src/main.py`
-2. Follow the instructions in the GUI
+---
 
-### Command Line
+## 🛠️ Usage
+
+### 🖥️ GUI Mode
+Simply run the main script without arguments to launch the graphical interface:
+```bash
+python src/main.py
+```
+
+### ⌨️ Command Line Interface
 
 **Transcribe audio to ELAN:**
 ```bash
-python -m src/main.py transcribe -i audio.wav -m user_models/whisper-small -s 2
+python src/main.py transcribe -i audio.wav -m user_models/whisper-small -s 2
 ```
 
 **Build dataset from ELAN files:**
 ```bash
-python -m src/main.py dataset -i file.eaf -o ./output -t "Speaker_00,Speaker_01"
+python src/main.py dataset -i file.eaf -o ./output -t "Speaker_00,Speaker_01"
 ```
 
-**Show help:**
+**Get Help:**
 ```bash
-python -m src/main.py --help
-python -m src/main.py transcribe --help
-python -m src/main.py dataset --help
+python src/main.py --help
+python src/main.py transcribe --help
+python src/main.py dataset --help
 ```
 
+---
 
+## 📜 License
 
-## License
-
-MIT License
+This project is licensed under the MIT License.

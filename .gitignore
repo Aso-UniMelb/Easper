@@ -1,2 +1,6 @@
 __pycache__
-.venv
+venv
+windows_installer/ffmpeg-7.1.1-full_build
+windows_installer/Output
+windows_installer/pip_packages
+user_models/*
