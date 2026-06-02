@@ -26,6 +26,7 @@ class ElanToASRApp(ctk.CTkFrame):
 
         self.selected_files = []
         self.train_folder = ""
+        self.replacements_file = ""
 
         # === Back Button (if callback provided)
         if back_callback:
@@ -76,13 +77,17 @@ class ElanToASRApp(ctk.CTkFrame):
         self.browse_train_folder_button = ctk.CTkButton(self.dataset_settings_frame, text="📂", command=self.select_train_folder)
         self.browse_train_folder_button.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
 
+        # Find and Replace List Button
+        self.browse_replacements_button = ctk.CTkButton(self.dataset_settings_frame, text="Select Find & Replace File...", command=self.select_replacements_file)
+        self.browse_replacements_button.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
+
         # Button to Build Training Dataset
         self.build_train_button = ctk.CTkButton(self.dataset_settings_frame, text="Build Training Dataset", command=self.build_train_set, fg_color="red")
-        self.build_train_button.grid(row=2, column=0, padx=10, pady=5, sticky="")
+        self.build_train_button.grid(row=3, column=0, padx=10, pady=5, sticky="")
 
         # progress bar
         self.progress_bar = ctk.CTkProgressBar(self.dataset_settings_frame)
-        self.progress_bar.grid(row=3, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
+        self.progress_bar.grid(row=4, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
         self.progress_bar.set(0)
         
         self.dataset_settings_frame.grid_remove()
@@ -386,19 +391,33 @@ class ElanToASRApp(ctk.CTkFrame):
             self.train_folder = foldername
             self.browse_train_folder_button.configure(text=foldername)
 
+    def select_replacements_file(self):
+        filename = filedialog.askopenfilename(
+            title="Select Find & Replace TSV File",
+            filetypes=(("TSV files", "*.tsv"), ("Text files", "*.txt"), ("All files", "*.*"))
+        )
+        if filename:
+            self.replacements_file = filename
+            self.browse_replacements_button.configure(text=f"📄 {os.path.basename(filename)}")
+
     def build_train_set(self):
         if not self.train_folder:
             self.log_report("Error: No output folder selected.")
             return
         
         def _build():
+            char_freqs = self.textboxes["chars"].get("1.0", "end").strip()
+            word_freqs = self.textboxes["words"].get("1.0", "end").strip()
             self.log_reset()
             zip_path = build_training_dataset(
                 self.selected_files,
                 self.tier_vars,
                 self.train_folder,
                 progress_callback=self._update_progress,
-                log_callback=self.log_report
+                log_callback=self.log_report,
+                char_freqs=char_freqs,
+                word_freqs=word_freqs,
+                replacements_file=self.replacements_file
             )
             self.after(0, lambda: messagebox.showinfo("Done", f"Training dataset built successfully!\nDataset stored at: {zip_path}"))
         

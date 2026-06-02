@@ -19,7 +19,37 @@ def get_wav_file(elan_file_path):
         return os.path.join(directory, files[0])
     return None
 
-def build_training_dataset(elan_files, tier_vars, output_folder, progress_callback=None, log_callback=None):
+def load_replacements(tsv_path):
+    replacements = []
+    if not tsv_path or not os.path.exists(tsv_path):
+        return replacements
+    try:
+        with open(tsv_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip('\n')
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    find_what = parts[0]
+                    replace_with = parts[1]
+                    try:
+                        pattern = re.compile(find_what)
+                        replacements.append((pattern, replace_with))
+                    except re.error:
+                        pass
+                elif len(parts) == 1:
+                    find_what = parts[0]
+                    try:
+                        pattern = re.compile(find_what)
+                        replacements.append((pattern, ""))
+                    except re.error:
+                        pass
+    except Exception:
+        pass
+    return replacements
+
+def build_training_dataset(elan_files, tier_vars, output_folder, progress_callback=None, log_callback=None, char_freqs=None, word_freqs=None, replacements_file=None):
     """
     Build training dataset from ELAN files.
     
@@ -29,6 +59,9 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
         output_folder: Output folder path
         progress_callback: Optional callback for progress updates (current, total)
         log_callback: Optional callback for logging messages
+        char_freqs: Optional character frequencies text
+        word_freqs: Optional word frequencies text
+        replacements_file: Optional path to a TSV file with find and replace regex rules
     
     Returns:
         Path to the last created zip file
@@ -36,6 +69,17 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
     zip_path = None
     temp_folder = os.path.join(output_folder, '__temp')
     os.makedirs(temp_folder, exist_ok=True)
+    
+    replacements = load_replacements(replacements_file)
+    
+    if char_freqs:
+        with open(os.path.join(temp_folder, "character_frequencies.txt"), "w", encoding="utf-8") as f:
+            f.write(char_freqs)
+            
+    if word_freqs:
+        with open(os.path.join(temp_folder, "word_frequencies.txt"), "w", encoding="utf-8") as f:
+            f.write(word_freqs)
+
     tsv_path = f'{temp_folder}/metadata.tsv'
     with open(tsv_path, "w", encoding="utf-8") as wfile:    
         for elan_file_path in elan_files:
@@ -79,6 +123,9 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
                 
                 for annotation in annotations:
                     start, end, text = annotation[0], annotation[1], annotation[2]
+                    if replacements:
+                        for pattern, repl in replacements:
+                            text = pattern.sub(repl, text)
                     text = text.strip()
                     if not text:
                         continue
