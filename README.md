@@ -83,6 +83,20 @@ python src/main.py dataset --help
 
 ---
 
+## 🔧 Fine-Tuning the Model
+
+After building the zip speech dataset from ELAN files, you can build your own transcription model using Google Colab:
+
+1. **Upload Dataset**: Go to your [Google Drive](https://drive.google.com) and upload the generated dataset `.zip` file into the folder named `Colab` located in the root directory.
+2. **Open Colab Notebook**: Open the Google Colab notebook at **[Google Colab Notebook](https://colab.research.google.com/drive/1vRt5T4FHj_z3KHv0_Z4fReHYW8IMOxNv?usp=sharing)** and follow the instructions.
+3. **Training & Output**: After 30 to 60 minutes (depending on the dataset length), the trained model will be saved as a `.zip` file in the root folder of your Google Drive.
+4. **Deploy Model**:
+   - Download the model `.zip` file from Google Drive.
+   - Unzip it into the `user_models` folder in the Easper application directory.
+5. **Restart Easper**: Restart Easper to see the new model in the list of available models for transcription.
+
+---
+
 ## 📜 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License.

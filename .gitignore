@@ -4,3 +4,4 @@ windows_installer/ffmpeg-7.1.1-full_build
 windows_installer/Output
 windows_installer/pip_packages
 user_models/*
+!user_models/README.txt

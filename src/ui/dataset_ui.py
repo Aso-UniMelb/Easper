@@ -159,7 +159,7 @@ class ElanToASRApp(ctk.CTkFrame):
                         display_text = f"{tier} ({count} annotations)"
                         var = ctk.StringVar(value=tier)
                         chk = ctk.CTkCheckBox(self.tiers_frame, text=display_text, variable=var, onvalue=tier, offvalue="")
-                        if not tier.startswith("tx@"):
+                        if tier.startswith("ENG@"):
                             chk.deselect()
                         chk.grid(row=row_idx, column=0, padx=5, pady=2, sticky="w")
                         row_idx += 1
