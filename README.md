@@ -97,6 +97,33 @@ After building the zip speech dataset from ELAN files, you can build your own tr
 
 ---
 
+## 👥 Authors & Citation
+
+Easper is developed at **The University of Melbourne**.
+
+* **Developer**: [Aso Mahmudi](https://scholar.google.com/citations?user=sHeSKFIAAAAJ&hl=en)
+* **Supervisor**: [Nicholas Thieberger](https://findanexpert.unimelb.edu.au/profile/18278-nicholas-thieberger)
+
+### Citation
+
+If you use Easper in your research, please cite our paper accepted at the **Interspeech 2026 Conference**:
+
+> **Easper: An Accessible ASR Pipeline for Language Documentation**  
+> *Aso Mahmudi, Ting Dang, Ekaterina Vylomova, and Nick Thieberger*  
+
+You can use the following BibTeX entry:
+
+```bibtex
+@inproceedings{mahmudi26_interspeech,
+  title={Easper: An Accessible ASR Pipeline for Language Documentation},
+  author={Mahmudi, Aso and Dang, Ting and Vylomova, Ekaterina and Thieberger, Nick},
+  booktitle={Interspeech 2026},
+  year={2026}
+}
+```
+
+---
+
 ## 📜 License
 
 This project is licensed under the MIT License.
