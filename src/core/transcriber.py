@@ -71,52 +71,109 @@ class Wav2ElanTranscriber:
         index, start, end, speaker, audio_segment = segment
         import torch
         with torch.no_grad():
+            results = []
+            main_text = ""
+
             if self.model_basename.startswith('whisper'):
                 # Convert to 1D array
                 segment_np = audio_segment.squeeze().numpy()
                 # Handle short segments or errors
                 if segment_np.size == 0:
-                    return (start, end, speaker, "")
-                input_features = self.feature_extractor(segment_np, sampling_rate=16000, return_tensors='pt').input_features.to(self.device)
-                if not self.model_basename.endswith('.en'): #if model is not English only:
-                    generated  = self.model.generate(input_features=input_features, language=self.LANG, task='transcribe', return_dict_in_generate=True, output_scores=True)
+                    text_with_conf = ""
                 else:
-                    generated  = self.model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True)
-                
-                scores = generated.scores
-                sequences = generated.sequences
-                prefix_len = sequences.size(1) - len(scores)
-                log_probs = []
-                for t, score_t in enumerate(scores):
-                    token_id = sequences[0, prefix_len + t]
-                    logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
-                    log_probs.append(logp)
-                avg_logprob = sum(log_probs) / len(log_probs)
-                text = self.tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
-                # switch to secondary model if avg_logprob < -0.6
-                if self.secondary_basename.startswith('whisper') and avg_logprob < -0.6:
-                    input_features = self.secondary_feature_extractor(segment_np, sampling_rate=16000, return_tensors='pt').input_features.to(self.device)
-                    if not self.secondary_basename.endswith('.en'): #if model is not English only:
-                        generated  = self.secondary_model.generate(input_features=input_features, language=self.LANG2, task='transcribe', return_dict_in_generate=True, output_scores=True)
+                    input_features = self.feature_extractor(segment_np, sampling_rate=16000, return_tensors='pt').input_features.to(self.device)
+                    if not self.model_basename.endswith('.en'): #if model is not English only:
+                        generated  = self.model.generate(input_features=input_features, language=self.LANG, task='transcribe', return_dict_in_generate=True, output_scores=True)
                     else:
-                        generated  = self.secondary_model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True)
+                        generated  = self.model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True)
+                    
+                    scores = generated.scores
                     sequences = generated.sequences
-                    text = self.secondary_tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
+                    prefix_len = sequences.size(1) - len(scores)
+                    log_probs = []
+                    for t, score_t in enumerate(scores):
+                        token_id = sequences[0, prefix_len + t]
+                        logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
+                        log_probs.append(logp)
+                    avg_logprob = sum(log_probs) / len(log_probs) if log_probs else 0
+                    text = self.tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
+                    import math
+                    prob = math.exp(avg_logprob)
+                    confidence_score = max(0, min(9, int(round(prob * 9))))
+                    text_with_conf = f"[{confidence_score}] {text}" if text else ""
+
             elif self.model_basename.startswith(('xls', 'mms')):
                 inputs = self.processor([audio_segment], sampling_rate=16000, return_tensors="pt", padding=True, return_attention_mask=True)
                 logits = self.model(inputs.input_values, attention_mask=inputs.attention_mask).logits
                 predicted_ids = torch.argmax(logits, dim=-1)
                 text = self.processor.batch_decode(predicted_ids)[0].strip()
+                probs = torch.softmax(logits, dim=-1)
+                max_probs, _ = torch.max(probs, dim=-1)
+                avg_prob = torch.mean(max_probs).item()
+                confidence_score = max(0, min(9, int(round(avg_prob * 9))))
+                text_with_conf = f"[{confidence_score}] {text}" if text else ""
+            else:
+                text_with_conf = ""
 
-            if not any(character.isalnum() for character in text):
-                return (start, end, speaker, "")
+            if text_with_conf and any(character.isalnum() for character in text_with_conf):
+                results.append((start, end, speaker, text_with_conf))
+                main_text = text_with_conf
+            else:
+                results.append((start, end, speaker, ""))
+
+            if self.secondary_basename:
+                if self.secondary_basename.startswith('whisper'):
+                    segment_np = audio_segment.squeeze().numpy()
+                    if segment_np.size == 0:
+                        text2_with_conf = ""
+                    else:
+                        input_features = self.secondary_feature_extractor(segment_np, sampling_rate=16000, return_tensors='pt').input_features.to(self.device)
+                        if not self.secondary_basename.endswith('.en'):
+                            generated  = self.secondary_model.generate(input_features=input_features, language=self.LANG2, task='transcribe', return_dict_in_generate=True, output_scores=True)
+                        else:
+                            generated  = self.secondary_model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True)
+                        scores = generated.scores
+                        sequences = generated.sequences
+                        prefix_len = sequences.size(1) - len(scores)
+                        log_probs = []
+                        for t, score_t in enumerate(scores):
+                            token_id = sequences[0, prefix_len + t]
+                            logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
+                            log_probs.append(logp)
+                        avg_logprob2 = sum(log_probs) / len(log_probs) if log_probs else 0
+                        text2 = self.secondary_tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
+                        import math
+                        prob2 = math.exp(avg_logprob2)
+                        confidence_score2 = max(0, min(9, int(round(prob2 * 9))))
+                        text2_with_conf = f"[{confidence_score2}] {text2}" if text2 else ""
+
+                elif self.secondary_basename.startswith(('xls', 'mms')):
+                    inputs = self.secondary_processor([audio_segment], sampling_rate=16000, return_tensors="pt", padding=True, return_attention_mask=True)
+                    logits = self.secondary_model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+                    predicted_ids = torch.argmax(logits, dim=-1)
+                    text2 = self.secondary_processor.batch_decode(predicted_ids)[0].strip()
+                    probs = torch.softmax(logits, dim=-1)
+                    max_probs, _ = torch.max(probs, dim=-1)
+                    avg_prob2 = torch.mean(max_probs).item()
+                    confidence_score2 = max(0, min(9, int(round(avg_prob2 * 9))))
+                    text2_with_conf = f"[{confidence_score2}] {text2}" if text2 else ""
+                else:
+                    text2_with_conf = ""
+
+                secondary_speaker = f"{speaker}_CS"
+                if text2_with_conf and any(character.isalnum() for character in text2_with_conf):
+                    results.append((start, end, secondary_speaker, text2_with_conf))
+                else:
+                    results.append((start, end, secondary_speaker, ""))
+
             # Update progress
             self.current_segment = self.current_segment + 1
             if self.progress_callback:
-                self.progress_callback(self.current_segment, self.total_segments, f"Segment {self.current_segment}/{self.total_segments} Transcribed", text)
+                self.progress_callback(self.current_segment, self.total_segments, f"Segment {self.current_segment}/{self.total_segments} Transcribed", main_text)
             else:
-                print(f"Segment {index+1}: {text}")
-            return (start, end, speaker, text)
+                print(f"Segment {index+1}: {main_text}")
+            
+            return results
 
     def transcribe_audio(self, file_path, min_on=0.5, min_off=0.5, progress_callback=None, stop_check=None, only_segment=False, segments_file=None, start_time=0, end_time=None):
         self.progress_callback = progress_callback
@@ -178,10 +235,12 @@ class Wav2ElanTranscriber:
 
         if only_segment:
              # Skip ASR and just prepare empty transcriptions
-            for item in utterances:
+            for start, end, speaker in utterances:
                  # item is (start, end, speaker)
                  # transcribed expects (start, end, speaker, text)
-                 transcribed.append((item[0]+ start_time, item[1]+ start_time, item[2], ""))
+                 transcribed.append((start + start_time, end + start_time, speaker, ""))
+                 if self.secondary_basename:
+                     transcribed.append((start + start_time, end + start_time, f"{speaker}_CS", ""))
             
             # Mock times to avoid errors in report
             self.time_records['loading_asr'] = time.time()
@@ -267,7 +326,13 @@ class Wav2ElanTranscriber:
             self.total_segments = len(segments)
             # transcribed = Parallel(n_jobs=-1)(delayed(self.transcribe_segment)(segment) for segment in segments)
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                transcribed = list(executor.map(self.transcribe_segment, segments))
+                transcribed_nested = list(executor.map(self.transcribe_segment, segments))
+                transcribed = []
+                for sublist in transcribed_nested:
+                    if isinstance(sublist, list):
+                        transcribed.extend(sublist)
+                    else:
+                        transcribed.append(sublist)
 
             # Shift timestamps back to original timebase
             if start_time > 0:
@@ -286,29 +351,25 @@ class Wav2ElanTranscriber:
 
         eaf = pympi.Elan.Eaf()
         eaf.add_linked_file(file_path)
-        for speaker in speakers:
-            eaf.add_tier(speaker)
+        
+        tier_names = set()
+        for _, _, speaker, _ in transcribed:
+            tier_names.add(speaker)
+            
+        for tier_name in tier_names:
+            if tier_name not in eaf.get_tier_names():
+                eaf.add_tier(tier_name)
 
         for start, end, speaker, text in transcribed:
-            text = text.strip()
-            # Determine speaker ID string
-            if isinstance(speaker, int) or (isinstance(speaker, str) and speaker.isdigit()):
-                speaker_id = f"Speaker_{int(speaker)}"
-            else:
-                speaker_id = str(speaker)
-                
-            eaf.add_annotation(speaker_id, int(start * 1000), int(end * 1000), text)
+            text = text.strip()                
+            eaf.add_annotation(speaker, int(start * 1000), int(end * 1000), text)
         eaf.to_file(output_eaf)
         
         if not only_segment:
             with open(output_txt, 'w', encoding='utf-8') as f:
                 for start, end, speaker, text in transcribed:
                     text = text.strip()
-                    if isinstance(speaker, int) or (isinstance(speaker, str) and speaker.isdigit()):
-                        speaker_id = f"Speaker_{int(speaker)}"
-                    else:
-                        speaker_id = str(speaker)
-                    f.write(f"{convert_seconds_to_ms(start)}\t{convert_seconds_to_ms(end)}\t{speaker_id}\t{text}\n")
+                    f.write(f"{convert_seconds_to_ms(start)}\t{convert_seconds_to_ms(end)}\t{speaker}\t{text}\n")
 
         self.time_records['end'] = time.time()
         time_report = '=====Time Report (min:sec)=====\n'

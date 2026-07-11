@@ -329,10 +329,8 @@ class TranscribeToElanApp(ctk.CTkFrame):
         for code, name in WHISPER_LANGUAGES.items():
             if name == selected_language:
                 language_code = code
-                break
             if name == selected_secondary_language:
                 secondary_language_code = code
-                break
 
         # Get start and end times
         start_time = self.parse_time_string(self.start_time_entry.get())

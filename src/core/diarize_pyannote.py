@@ -39,6 +39,6 @@ def diarize_pyannote(audio_path, num_speakers=1):
     utterances = []
     for turn, _, speaker in output_diarization.itertracks(yield_label=True):
         speaker = speaker.replace("SPEAKER_0", "")
-        utterances.append((turn.start, turn.end, int(speaker)))
+        utterances.append((turn.start, turn.end, f"Speaker_{int(speaker) + 1}"))
     print("Speaker diarization completed.")
     return utterances

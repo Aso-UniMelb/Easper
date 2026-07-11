@@ -49,7 +49,7 @@ def diarize_speechbrain(audio_path, num_speakers=1):
     init_segments = []
     if num_speakers == 1:
         for seg in speech_ts:
-            init_segments.append((seg['start']/fs, seg['end']/fs, 0))
+            init_segments.append((seg['start']/fs, seg['end']/fs, f"Speaker_1"))
     
     elif num_speakers > 1:
         print("Loading speaker diarization model...")
@@ -103,6 +103,9 @@ def diarize_speechbrain(audio_path, num_speakers=1):
         cluster_labels = AgglomerativeClustering(n_clusters=num_speakers, linkage="average").fit_predict(S)
 
         for i in range(len(cluster_labels)):
-            init_segments.append((segments[i][0] / fs, segments[i][1] / fs, int(cluster_labels[i])))
+            s_start = segments[i][0] / fs
+            s_end = segments[i][1] / fs
+            s_speaker = f"Speaker_{int(cluster_labels[i])+1}"
+            init_segments.append((s_start, s_end, s_speaker))
     print("Segmentation Finished!")
     return init_segments
