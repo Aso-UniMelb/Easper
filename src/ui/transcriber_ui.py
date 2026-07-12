@@ -125,20 +125,35 @@ class TranscribeToElanApp(ctk.CTkFrame):
         self.language_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=sorted_languages)
         self.language_combobox.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
         self.language_combobox.set("english")
-      
+
+        # checkbox for enabling confidence score output (checked by default)
+        self.output_confidence_checkbox = ctk.CTkCheckBox(
+            self.transcription_options_frame,
+            text="Output Confidence Scores"
+        )
+        self.output_confidence_checkbox.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="w")
+        self.output_confidence_checkbox.select()  # checked by default
+
+        # combobox for Word List (OOV detection)
+        self.wordlist_label = ctk.CTkLabel(self.transcription_options_frame, text="Word List (OOV check):")
+        self.wordlist_label.grid(row=3, column=0, padx=10, pady=5, sticky="e")
+        self.wordlist_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=["None"])
+        self.wordlist_combobox.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+        self.wordlist_combobox.set("None")
+
         # combobox for Secondary ASR model
         self.secondary_model_label = ctk.CTkLabel(self.transcription_options_frame, text="ASR Model for Second Language:")
-        self.secondary_model_label.grid(row=2, column=0, padx=10, pady=5, sticky="e")
+        self.secondary_model_label.grid(row=4, column=0, padx=10, pady=5, sticky="e")
         self.secondary_model_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=[])
-        self.secondary_model_combobox.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+        self.secondary_model_combobox.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
 
         # combobox for Language
         self.secondary_language_label = ctk.CTkLabel(self.transcription_options_frame, text="Tokenizer for Second Language:")
-        self.secondary_language_label.grid(row=3, column=0, padx=10, pady=5, sticky="e")
+        self.secondary_language_label.grid(row=5, column=0, padx=10, pady=5, sticky="e")
         
         # Sort languages by name
         self.secondary_language_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=sorted_languages)
-        self.secondary_language_combobox.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+        self.secondary_language_combobox.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
         self.secondary_language_combobox.set("english")
 
 
@@ -197,14 +212,37 @@ class TranscribeToElanApp(ctk.CTkFrame):
                 full_path = os.path.join(current_dir, d)
                 if full_path not in models:
                     models.append(full_path)
-        
-        if models:
-            self.asr_model_combobox.configure(values=models)
-            self.asr_model_combobox.set(models[0])
-            self.secondary_model_combobox.configure(values=["None"] + models)
+
+        # Build display-name → full-path map for models (basename only, cross-platform)
+        self._model_path_map = {}
+        for full_path in models:
+            name = os.path.basename(full_path)
+            # Handle unlikely duplicate basenames by appending parent folder name
+            if name in self._model_path_map:
+                name = os.path.basename(os.path.dirname(full_path)) + "/" + name
+            self._model_path_map[name] = full_path
+
+        model_names = list(self._model_path_map.keys())
+        if model_names:
+            self.asr_model_combobox.configure(values=model_names)
+            self.asr_model_combobox.set(model_names[0])
+            self.secondary_model_combobox.configure(values=["None"] + model_names)
             self.secondary_model_combobox.set("None")
         else:
             messagebox.showerror("Error", "No ASR models found.")
+
+        # Discover word list .txt files from the word_lists/ folder at project root
+        wordlists_dir = os.path.join(current_dir, "word_lists")
+        self._wordlist_path_map = {}  # display name → full path
+        wordlist_names = ["None"]
+        if os.path.isdir(wordlists_dir):
+            for f in sorted(os.listdir(wordlists_dir)):
+                if f.lower().endswith(".txt"):
+                    full_path = os.path.join(wordlists_dir, f)
+                    self._wordlist_path_map[f] = full_path
+                    wordlist_names.append(f)
+        self.wordlist_combobox.configure(values=wordlist_names)
+        self.wordlist_combobox.set("None")
 
     def ms_to_min_sec(self, milliseconds):
         ''' convert milliseconds to MM:SS format string (for display label) '''
@@ -314,9 +352,12 @@ class TranscribeToElanApp(ctk.CTkFrame):
             messagebox.showerror("Error", "Output folder path does not exist.")
             return
 
-        # Collect values from UI
-        model_name = self.asr_model_combobox.get()
-        secondary_model_name = self.secondary_model_combobox.get()
+        # Collect values from UI — resolve display names back to full paths
+        model_name = self._model_path_map.get(self.asr_model_combobox.get(),
+                                               self.asr_model_combobox.get())
+        secondary_display = self.secondary_model_combobox.get()
+        secondary_model_name = ("None" if secondary_display == "None"
+                                else self._model_path_map.get(secondary_display, secondary_display))
         min_on = float(self.min_annotation_length_entry.get())
         min_off = float(self.min_duration_between_segments_entry.get())
         audio_file = self.audio_file
@@ -362,11 +403,27 @@ class TranscribeToElanApp(ctk.CTkFrame):
         self.stop_button.grid()
         self.progress_bar.set(0)
         self.progress_label.configure(text="Initializing...")
-        
-        # Start the thread with arguments
-        threading.Thread(target=self.run_process, args=(model_name, secondary_model_name, segmentation_model, audio_file, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code), daemon=True).start()
 
-    def run_process(self, model_name, secondary_model_name, segmentation_model, audio_file_path, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code):
+        # Load word list into a set (if one is selected)
+        wordlist_display = self.wordlist_combobox.get()
+        wordlist_path = self._wordlist_path_map.get(wordlist_display, None)
+        word_set = None
+        if wordlist_path and os.path.isfile(wordlist_path):
+            try:
+                with open(wordlist_path, 'r', encoding='utf-8') as wf:
+                    word_set = {line.strip() for line in wf
+                                if line.strip() and not line.strip().startswith('#')}
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load word list: {e}")
+                return
+        
+        # Read confidence score checkbox
+        output_confidence = bool(self.output_confidence_checkbox.get())
+
+        # Start the thread with arguments
+        threading.Thread(target=self.run_process, args=(model_name, secondary_model_name, segmentation_model, audio_file, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code, word_set, output_confidence), daemon=True).start()
+
+    def run_process(self, model_name, secondary_model_name, segmentation_model, audio_file_path, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code, word_set=None, output_confidence=True):
         # Initialize Transcriber with stop check
         num_speakers = int(self.num_speakers_slider.get())
         transcriber = Wav2ElanTranscriber(
@@ -377,7 +434,9 @@ class TranscribeToElanApp(ctk.CTkFrame):
             progress_callback=self.update_progress,
             stop_check=lambda: self.stop_requested,
             language=language_code,
-            secondary_language=secondary_language_code
+            secondary_language=secondary_language_code,
+            word_set=word_set,
+            output_confidence=output_confidence
         )
         
         # Check if stopped during initialization

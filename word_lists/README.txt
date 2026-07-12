@@ -1,0 +1,12 @@
+put
+one
+word
+per
+line
+to
+check
+out
+of
+vocabulary
+in
+transcriptions

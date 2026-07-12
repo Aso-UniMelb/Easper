@@ -5,3 +5,5 @@ windows_installer/Output
 windows_installer/pip_packages
 user_models/*
 !user_models/README.txt
+word_lists/*
+!word_lists/README.txt
