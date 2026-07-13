@@ -20,178 +20,241 @@ temp_dir = str(get_temp_dir())
 class TranscribeToElanApp(ctk.CTkFrame):
     def __init__(self, parent, back_callback=None):
         super().__init__(parent)
-        
+
         self.parent = parent
         self.back_callback = back_callback
-
-        # configure grid layout
         self.grid_columnconfigure(0, weight=1)
-        
+
         self.audio_file = ""
         self.input_eaf_path = None
         self.stop_requested = False
-        self.output_elan_path = ""        
+        self.output_elan_path = ""
 
-        # === Back Button (if callback provided)
+        # ── Back button ──────────────────────────────────────────────
         if back_callback:
-            self.back_button = ctk.CTkButton(self, text="← Back to Menu", command=back_callback, width=120, fg_color="gray")
-            self.back_button.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
+            self.back_button = ctk.CTkButton(
+                self, text="← Back", command=back_callback,
+                width=90, fg_color="gray", hover_color="#555"
+            )
+            self.back_button.grid(row=0, column=0, padx=12, pady=(5, 0), sticky="w")
 
-        # === Browse Button for Audio file
-        self.browse_input_file_button = ctk.CTkButton(self, text="Select an untranscribed file\n(either an audio or a segmented ELAN file)...", command=self.browse_input_file)
-        self.browse_input_file_button.grid(row=1, column=0, padx=10, pady=(20, 0), sticky="")
-        # label showing file path
-        self.file_path_label = ctk.CTkLabel(self, text="")
-        self.file_path_label.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="")
+        # ── File picker ──────────────────────────────────────────────
+        self.browse_input_file_button = ctk.CTkButton(
+            self, text="📂  Open Audio or ELAN File…",
+            command=self.browse_input_file,
+            height=44, font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.browse_input_file_button.grid(row=1, column=0, padx=12, pady=(5, 4), sticky="ew")
 
-        # === 
+        self.file_path_label = ctk.CTkLabel(
+            self, text="Select an audio file (.wav or .mp4) or a segmented but untranscribed ELAN file.",
+            text_color="gray", font=ctk.CTkFont(size=12)
+        )
+        self.file_path_label.grid(row=2, column=0, padx=12, pady=(0, 5))
+
+        # ── Segmentation frame ───────────────────────────────────────
         self.segmentation_options_frame = ctk.CTkFrame(self)
         self.segmentation_options_frame.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
-        self.segmentation_options_frame.grid_columnconfigure(1, weight=1)
+        self.segmentation_options_frame.grid_columnconfigure(0, weight=1)
 
-        # slider for number of speakers
-        self.num_speakers_label = ctk.CTkLabel(self.segmentation_options_frame, text="Number of Speakers:")
-        self.num_speakers_label.grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        
-        self.num_speakers_frame = ctk.CTkFrame(self.segmentation_options_frame, fg_color="transparent")
-        self.num_speakers_frame.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
-        self.num_speakers_frame.grid_columnconfigure(0, weight=1)
-        
-        self.num_speakers_slider = ctk.CTkSlider(self.num_speakers_frame, from_=1, to=5, number_of_steps=4, command=self.update_speakers_label)
-        self.num_speakers_slider.grid(row=0, column=0, padx=(0, 10), sticky="ew")
-        self.num_speakers_slider.set(1)
-        
-        self.num_speakers_value_label = ctk.CTkLabel(self.num_speakers_frame, text="1", width=30)
-        self.num_speakers_value_label.grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(
+            self.segmentation_options_frame, text="Segmentation",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, padx=12, pady=(5, 4), sticky="w")
 
-        # entry for minimum duration betwwen segments (in seconds)
-        self.min_duration_between_segments_label = ctk.CTkLabel(self.segmentation_options_frame, text="Minimum Gap between Segments (in seconds):")
-        self.min_duration_between_segments_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        self.min_duration_between_segments_entry = ctk.CTkEntry(self.segmentation_options_frame, width=40)
-        self.min_duration_between_segments_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+        # Time range – From / To side by side
+        _tf = ctk.CTkFrame(self.segmentation_options_frame, fg_color="transparent")
+        _tf.grid(row=1, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
+        ctk.CTkLabel(_tf, text="From Time (HH:MM:SS):").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.start_time_entry = ctk.CTkEntry(_tf, width=90, placeholder_text="00:00:00")
+        self.start_time_entry.grid(row=0, column=1, padx=(0, 16), sticky="w")
+        self.start_time_entry.insert(0, "00:00:00")
+        ctk.CTkLabel(_tf, text="To Time (HH:MM:SS):").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.end_time_entry = ctk.CTkEntry(_tf, width=90, placeholder_text="HH:MM:SS")
+        self.end_time_entry.grid(row=0, column=3, sticky="w")
+
+        # Min gap / Min length – side by side
+        _df = ctk.CTkFrame(self.segmentation_options_frame, fg_color="transparent")
+        _df.grid(row=2, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
+        ctk.CTkLabel(_df, text="Merge segments if gap is shorter than (in seconds):").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.min_duration_between_segments_entry = ctk.CTkEntry(_df, width=60)
+        self.min_duration_between_segments_entry.grid(row=0, column=1, padx=(0, 20), sticky="w")
         self.min_duration_between_segments_entry.insert(0, "0.4")
-
-        # entry for minimum annotation length (in seconds)
-        self.min_annotation_length_label = ctk.CTkLabel(self.segmentation_options_frame, text="Minimum Segment Length (in seconds):")
-        self.min_annotation_length_label.grid(row=2, column=0, padx=10, pady=5, sticky="e")
-        self.min_annotation_length_entry = ctk.CTkEntry(self.segmentation_options_frame, width=40)
-        self.min_annotation_length_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(_df, text="Discard segments shorter than (in seconds):").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.min_annotation_length_entry = ctk.CTkEntry(_df, width=60)
+        self.min_annotation_length_entry.grid(row=0, column=3, sticky="w")
         self.min_annotation_length_entry.insert(0, "0.5")
 
-        # Start Time
-        self.start_time_label = ctk.CTkLabel(self.segmentation_options_frame, text="Start Time (HH:MM:SS):")
-        self.start_time_label.grid(row=3, column=0, padx=10, pady=5, sticky="e")
-        self.start_time_entry = ctk.CTkEntry(self.segmentation_options_frame, width=100)
-        self.start_time_entry.grid(row=3, column=1, padx=10, pady=5, sticky="w")
-        self.start_time_entry.insert(0, "00:00:00")
-
-        # End Time
-        self.end_time_label = ctk.CTkLabel(self.segmentation_options_frame, text="End Time (HH:MM:SS):")
-        self.end_time_label.grid(row=4, column=0, padx=10, pady=5, sticky="e")
-        self.end_time_entry = ctk.CTkEntry(self.segmentation_options_frame, width=100, placeholder_text="HH:MM:SS")
-        self.end_time_entry.grid(row=4, column=1, padx=10, pady=5, sticky="w")
-
-        # Segmentation model
-        self.segmentation_model_label = ctk.CTkLabel(self.segmentation_options_frame, text="Segmentation/Diarization Model:")
-        self.segmentation_model_label.grid(row=5, column=0, padx=10, pady=5, sticky="e")
-        self.segmentation_model_combobox = ctk.CTkComboBox(self.segmentation_options_frame, values=['speechbrain', 'pyannote'])
-        self.segmentation_model_combobox.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
-
+        # Speakers and Diarization Model - side by side
+        _sf = ctk.CTkFrame(self.segmentation_options_frame, fg_color="transparent")
+        _sf.grid(row=3, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
         
-        # === Transcription Options ===
-        self.only_segment_switch = ctk.CTkSwitch(self.segmentation_options_frame, text="Only Segmentation (No Transcription)", command=self.on_only_segment_change)
-        self.only_segment_switch.grid(row=6, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
+        ctk.CTkLabel(_sf, text="Number of Speakers:").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.num_speakers_frame = ctk.CTkFrame(_sf, fg_color="transparent")
+        self.num_speakers_frame.grid(row=0, column=1, padx=(0, 20), sticky="w")
+        self.num_speakers_slider = ctk.CTkSlider(
+            self.num_speakers_frame, from_=1, to=5, number_of_steps=4,
+            command=self.update_speakers_label, width=100
+        )
+        self.num_speakers_slider.grid(row=0, column=0, padx=(0, 4), sticky="ew")
+        self.num_speakers_slider.set(1)
+        self.num_speakers_value_label = ctk.CTkLabel(self.num_speakers_frame, text="1", width=20)
+        self.num_speakers_value_label.grid(row=0, column=1, sticky="w")
+
+        ctk.CTkLabel(_sf, text="Segmentation/Diarization Model:").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.segmentation_model_combobox = ctk.CTkComboBox(
+            _sf, values=["speechbrain", "pyannote"], width=120
+        )
+        self.segmentation_model_combobox.grid(row=0, column=3, sticky="w")
+
+        # Only-segment toggle
+        self.only_segment_switch = ctk.CTkSwitch(
+            self.segmentation_options_frame,
+            text="Segmentation only  (skip transcription)",
+            command=self.on_only_segment_change
+        )
+        self.only_segment_switch.grid(
+            row=4, column=0, columnspan=2, padx=12, pady=(4, 5), sticky="w"
+        )
 
         self.segmentation_options_frame.grid_remove()
 
-
-        # === Automatic Transcription Options
+        # ── Transcription frame ──────────────────────────────────────
         self.transcription_options_frame = ctk.CTkFrame(self)
         self.transcription_options_frame.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
-        self.transcription_options_frame.grid_columnconfigure(1, weight=1)
+        self.transcription_options_frame.grid_columnconfigure(0, weight=1)
 
-        # combobox for ASR model
-        self.asr_model_label = ctk.CTkLabel(self.transcription_options_frame, text="ASR Model:")
-        self.asr_model_label.grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        self.asr_model_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=[])
-        self.asr_model_combobox.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(
+            self.transcription_options_frame, text="Transcription",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, padx=12, pady=(5, 4), sticky="w")
 
-        # combobox for Language
-        self.language_label = ctk.CTkLabel(self.transcription_options_frame, text="Tokenizer Language:")
-        self.language_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        
-        # Sort languages by name
         sorted_languages = sorted(WHISPER_LANGUAGES.values())
-        self.language_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=sorted_languages)
-        self.language_combobox.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+
+        # Primary model + language - side by side
+        _pmf = ctk.CTkFrame(self.transcription_options_frame, fg_color="transparent")
+        _pmf.grid(row=1, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
+        
+        ctk.CTkLabel(_pmf, text="Main ASR Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.asr_model_combobox = ctk.CTkComboBox(_pmf, values=[], width=180)
+        self.asr_model_combobox.grid(row=0, column=1, padx=(0, 20), sticky="w")
+
+        ctk.CTkLabel(_pmf, text="Tokenizer Language:").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.language_combobox = ctk.CTkComboBox(
+            _pmf, values=sorted_languages, width=120
+        )
+        self.language_combobox.grid(row=0, column=3, sticky="w")
         self.language_combobox.set("english")
 
-        # checkbox for enabling confidence score output (checked by default)
-        self.output_confidence_checkbox = ctk.CTkCheckBox(
-            self.transcription_options_frame,
-            text="Output Confidence Scores"
-        )
-        self.output_confidence_checkbox.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="w")
-        self.output_confidence_checkbox.select()  # checked by default
+        # Quality sub-section
+        ctk.CTkLabel(
+            self.transcription_options_frame, text="Quality & Out-of-Vocabulary Checks",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color="gray"
+        ).grid(row=2, column=0, columnspan=2, padx=12, pady=(5, 2), sticky="w")
 
-        # combobox for Word List (OOV detection)
-        self.wordlist_label = ctk.CTkLabel(self.transcription_options_frame, text="Word List (OOV check):")
-        self.wordlist_label.grid(row=3, column=0, padx=10, pady=5, sticky="e")
-        self.wordlist_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=["None"])
-        self.wordlist_combobox.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+        # Output confidence and word list OOV - side by side
+        _qf = ctk.CTkFrame(self.transcription_options_frame, fg_color="transparent")
+        _qf.grid(row=3, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
+
+        self.output_confidence_checkbox = ctk.CTkCheckBox(
+            _qf, text="Output Confidence Scores"
+        )
+        self.output_confidence_checkbox.grid(row=0, column=0, padx=(0, 20), sticky="w")
+        self.output_confidence_checkbox.select()
+
+        ctk.CTkLabel(_qf, text="Word List (Valid Vocabulary):").grid(row=0, column=1, padx=(0, 4), sticky="e")
+        self.wordlist_combobox = ctk.CTkComboBox(
+            _qf, values=["None"], width=180
+        )
+        self.wordlist_combobox.grid(row=0, column=2, sticky="w")
         self.wordlist_combobox.set("None")
 
-        # combobox for Secondary ASR model
-        self.secondary_model_label = ctk.CTkLabel(self.transcription_options_frame, text="ASR Model for Second Language:")
-        self.secondary_model_label.grid(row=4, column=0, padx=10, pady=5, sticky="e")
-        self.secondary_model_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=[])
-        self.secondary_model_combobox.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        # Second language sub-section
+        ctk.CTkLabel(
+            self.transcription_options_frame, text="Second Language Transcription (optional)",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color="gray"
+        ).grid(row=4, column=0, columnspan=2, padx=12, pady=(5, 2), sticky="w")
 
-        # combobox for Language
-        self.secondary_language_label = ctk.CTkLabel(self.transcription_options_frame, text="Tokenizer for Second Language:")
-        self.secondary_language_label.grid(row=5, column=0, padx=10, pady=5, sticky="e")
-        
-        # Sort languages by name
-        self.secondary_language_combobox = ctk.CTkComboBox(self.transcription_options_frame, values=sorted_languages)
-        self.secondary_language_combobox.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
+        # Second ASR model and language - side by side
+        _smf = ctk.CTkFrame(self.transcription_options_frame, fg_color="transparent")
+        _smf.grid(row=5, column=0, columnspan=2, padx=12, pady=(4, 5), sticky="ew")
+
+        ctk.CTkLabel(_smf, text="Secondary ASR Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.secondary_model_combobox = ctk.CTkComboBox(
+            _smf, values=[], width=180
+        )
+        self.secondary_model_combobox.grid(row=0, column=1, padx=(0, 20), sticky="w")
+
+        ctk.CTkLabel(_smf, text="Tokenizer Language:").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.secondary_language_combobox = ctk.CTkComboBox(
+            _smf, values=sorted_languages, width=120
+        )
+        self.secondary_language_combobox.grid(row=0, column=3, sticky="w")
         self.secondary_language_combobox.set("english")
-
 
         self.transcription_options_frame.grid_remove()
 
-        # ===================
+        # ── Output / Process frame ───────────────────────────────────
         self.process_frame = ctk.CTkFrame(self)
         self.process_frame.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
         self.process_frame.grid_columnconfigure(1, weight=1)
 
-        # output Elan path
-        self.output_elan_path_label = ctk.CTkLabel(self.process_frame, text="Output ELAN Path:")
-        self.output_elan_path_label.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-        self.output_elan_path_entry = ctk.CTkEntry(self.process_frame, width=200)
-        self.output_elan_path_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(
+            self.process_frame, text="Output",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, padx=12, pady=(5, 4), sticky="w")
 
+        # Output path
+        _op = ctk.CTkFrame(self.process_frame, fg_color="transparent")
+        _op.grid(row=1, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
+        _op.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(_op, text="Save to:").grid(row=0, column=0, padx=(0, 8), sticky="e")
+        self.output_elan_path_entry = ctk.CTkEntry(_op)
+        self.output_elan_path_entry.grid(row=0, column=1, sticky="ew")
 
-        # Button to Start Transcription
-        self.transcription_button = ctk.CTkButton(self.process_frame, text="Transcribe!", font=ctk.CTkFont(weight="bold"), fg_color="green", command=self.start_transcription)
-        self.transcription_button.grid(row=1, column=0, padx=10, pady=20, sticky="", columnspan=2)
-        # Stop button (initially hidden)
-        self.stop_button = ctk.CTkButton(self.process_frame, text="Stop", font=ctk.CTkFont(weight="bold"), fg_color="red", hover_color="darkred", command=self.stop_transcription)
-        self.stop_button.grid(row=1, column=1, padx=10, pady=5, sticky="e")
+        # Action buttons
+        _ab = ctk.CTkFrame(self.process_frame, fg_color="transparent")
+        _ab.grid(row=2, column=0, columnspan=2, padx=12, pady=(5, 8), sticky="ew")
+        _ab.grid_columnconfigure(0, weight=1)
+
+        self.transcription_button = ctk.CTkButton(
+            _ab, text="▶  Transcribe!",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color="#2a7d2a", hover_color="#1e5c1e",
+            height=42, command=self.start_transcription
+        )
+        self.transcription_button.grid(row=0, column=0, sticky="ew")
+
+        self.stop_button = ctk.CTkButton(
+            _ab, text="⏹  Stop",
+            font=ctk.CTkFont(weight="bold"),
+            fg_color="#c0392b", hover_color="#922b21",
+            height=42, command=self.stop_transcription
+        )
+        self.stop_button.grid(row=0, column=1, padx=(8, 0))
         self.stop_button.grid_remove()
-        # Progress label
-        self.progress_label = ctk.CTkLabel(self.process_frame, text="")
-        self.progress_label.grid(row=2, column=0, padx=10, pady=5, sticky="", columnspan=2)
-        # Progress bar
-        self.progress_bar = ctk.CTkProgressBar(self.process_frame)
-        self.progress_bar.grid(row=3, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
+
+        # Progress
+        self.progress_label = ctk.CTkLabel(
+            self.process_frame, text="",
+            font=ctk.CTkFont(size=12), text_color="gray"
+        )
+        self.progress_label.grid(row=3, column=0, columnspan=2, padx=12, pady=(4, 2))
+
+        self.progress_bar = ctk.CTkProgressBar(self.process_frame, height=8)
+        self.progress_bar.grid(row=4, column=0, columnspan=2, padx=12, pady=(0, 4), sticky="ew")
         self.progress_bar.set(0)
-        # last transcription (wordwrap)
-        self.last_transcribed_label = ctk.CTkLabel(self.process_frame, text="", wraplength=400)
-        self.last_transcribed_label.grid(row=4, column=0, padx=10, pady=5, sticky="", columnspan=2)
-        
+
+        self.last_transcribed_label = ctk.CTkLabel(
+            self.process_frame, text="", wraplength=420,
+            font=ctk.CTkFont(size=11), text_color="gray"
+        )
+        self.last_transcribed_label.grid(row=5, column=0, columnspan=2, padx=12, pady=(0, 5))
+
         self.process_frame.grid_remove()
 
         self.populate_models()
+
 
     def on_only_segment_change(self):
         if self.only_segment_switch.get():
