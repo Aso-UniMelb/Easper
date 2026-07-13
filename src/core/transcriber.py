@@ -25,14 +25,12 @@ temp_dir = str(get_temp_dir())
 
 
 class Wav2ElanTranscriber:
-    def __init__(self, model_path, secondary_model_path="None", segmentation_model="pyannote", num_speakers=1, progress_callback=None, stop_check=None, language="en", secondary_language="en", word_set=None, output_confidence=True):
+    def __init__(self, model_path, secondary_model_path="None", segmentation_model="pyannote", num_speakers=1, progress_callback=None, language="en", secondary_language="en", word_set=None, output_confidence=True):
         
         global torch, torchaudio, Pipeline, WhisperForConditionalGeneration, WhisperTokenizer, WhisperFeatureExtractor, Resample, librosa, Wav2Vec2ForCTC, Wav2Vec2Processor
 
-        self.stopped = False
 
         self.progress_callback = progress_callback
-        self.stop_check = stop_check
 
         self.total_segments = 0
         self.current_segment = 0
@@ -340,9 +338,8 @@ class Wav2ElanTranscriber:
             
             return results
 
-    def transcribe_audio(self, file_path, min_on=0.5, min_off=0.5, progress_callback=None, stop_check=None, only_segment=False, segments_file=None, start_time=0, end_time=None):
+    def transcribe_audio(self, file_path, min_on=0.5, min_off=0.5, progress_callback=None, only_segment=False, segments_file=None, start_time=0, end_time=None):
         self.progress_callback = progress_callback
-        self.stop_check = stop_check
 
         os.makedirs(temp_dir, exist_ok=True)
         temp_file_path = self.convert_to_mono_16k(file_path, start_time, end_time)
@@ -412,12 +409,7 @@ class Wav2ElanTranscriber:
             self.time_records['transcribing'] = time.time()
 
         else:
-            self.time_records['loading_asr'] = time.time()      
-            # Check if stop was requested
-            if stop_check and stop_check():
-                self.stopped = True
-                return
-
+            self.time_records['loading_asr'] = time.time()
             
             if self.progress_callback:
                 self.progress_callback(0, 0, f"Loading ASR model(s)...")
@@ -428,12 +420,6 @@ class Wav2ElanTranscriber:
             import torchaudio
 
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-            # Check if stop was requested
-            if stop_check and stop_check():
-                self.stopped = True
-                return
 
             if self.model_basename.startswith('whisper') or self.secondary_basename.startswith('whisper'):
                 from transformers import WhisperForConditionalGeneration, WhisperTokenizer, WhisperFeatureExtractor
@@ -465,10 +451,6 @@ class Wav2ElanTranscriber:
                 progress_callback(0, 0, f"Transcribing {len(utterances)} segments, from {len(speakers)} speaker(s)...")
             else:
                 print(f"Transcribing {len(utterances)} segments, from {len(speakers)} speaker(s)...")
-            
-            # Check if stop was requested or if diarization returned early
-            if stop_check and stop_check():
-                return None
             
             # --- Transcribe Audio ---
             

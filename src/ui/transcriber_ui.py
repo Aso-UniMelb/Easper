@@ -27,7 +27,6 @@ class TranscribeToElanApp(ctk.CTkFrame):
 
         self.audio_file = ""
         self.input_eaf_path = None
-        self.stop_requested = False
         self.output_elan_path = ""
 
         # ── Back button ──────────────────────────────────────────────
@@ -225,14 +224,14 @@ class TranscribeToElanApp(ctk.CTkFrame):
         )
         self.transcription_button.grid(row=0, column=0, sticky="ew")
 
-        self.stop_button = ctk.CTkButton(
-            _ab, text="⏹  Stop",
+        self.terminate_button = ctk.CTkButton(
+            _ab, text="✕  Cancel",
             font=ctk.CTkFont(weight="bold"),
             fg_color="#c0392b", hover_color="#922b21",
-            height=42, command=self.stop_transcription
+            height=42, command=self.terminate_easper
         )
-        self.stop_button.grid(row=0, column=1, padx=(8, 0))
-        self.stop_button.grid_remove()
+        self.terminate_button.grid(row=0, column=1, padx=(8, 0))
+        self.terminate_button.grid_remove()
 
         # Progress
         self.progress_label = ctk.CTkLabel(
@@ -461,9 +460,8 @@ class TranscribeToElanApp(ctk.CTkFrame):
             from_elan = None
 
         # Disable UI and show stop button
-        self.stop_requested = False
         self.transcription_button.configure(state="disabled")
-        self.stop_button.grid()
+        self.terminate_button.grid()
         self.progress_bar.set(0)
         self.progress_label.configure(text="Initializing...")
 
@@ -487,7 +485,7 @@ class TranscribeToElanApp(ctk.CTkFrame):
         threading.Thread(target=self.run_process, args=(model_name, secondary_model_name, segmentation_model, audio_file, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code, word_set, output_confidence), daemon=True).start()
 
     def run_process(self, model_name, secondary_model_name, segmentation_model, audio_file_path, min_on, min_off, only_segment, from_elan, start_time, end_time, language_code, secondary_language_code, word_set=None, output_confidence=True):
-        # Initialize Transcriber with stop check
+        # Initialize Transcriber
         num_speakers = int(self.num_speakers_slider.get())
         transcriber = Wav2ElanTranscriber(
             model_name, 
@@ -495,35 +493,25 @@ class TranscribeToElanApp(ctk.CTkFrame):
             segmentation_model,
             num_speakers=num_speakers, 
             progress_callback=self.update_progress,
-            stop_check=lambda: self.stop_requested,
             language=language_code,
             secondary_language=secondary_language_code,
             word_set=word_set,
             output_confidence=output_confidence
         )
         
-        # Check if stopped during initialization
-        if self.stop_requested or transcriber.stopped:
-            self.finish_stopped()
-            return
-        
-        # Run transcription with stop check
+        # Run transcription
         output_file = transcriber.transcribe_audio(
             audio_file_path, 
             progress_callback=self.update_progress,
             min_on=min_on,
             min_off=min_off,
-            stop_check=lambda: self.stop_requested,
             only_segment=only_segment,
             segments_file=from_elan,
             start_time=start_time,
             end_time=end_time
         )
         
-        if self.stop_requested:
-            self.finish_stopped()
-        else:
-            self.finish_success(output_file)
+        self.finish_success(output_file)
 
     def update_progress(self, current, total, message, transcribed=None):
         # Create a thread-safe wrapper
@@ -538,39 +526,28 @@ class TranscribeToElanApp(ctk.CTkFrame):
                 self.last_transcribed_label.configure(text=transcribed)
         self.after(0, _update)
 
-    def stop_transcription(self):
-        """Request the transcription process to stop."""
-        self.stop_requested = True
-        self.stop_button.configure(state="disabled")
-        self.progress_label.configure(text="Stopping...")
+    def terminate_easper(self):
+        """Close the entire application immediately."""
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        import os
+        os._exit(0)
 
     def finish_success(self, output_file):
         def _finish():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            self.stop_button.grid_remove()
-            self.stop_button.configure(state="normal")
+            self.terminate_button.grid_remove()
+            self.terminate_button.configure(state="normal")
             self.progress_bar.set(1)
             self.progress_label.configure(text="Transcription completed successfully.")
             self.transcription_button.configure(state="normal")
             messagebox.showinfo("Success", f"Transcription completed successfully.\nOutput file: {output_file}")
         self.after(0, _finish)
-    
-    def finish_stopped(self):
-        """Handle transcription stopped by user."""
-        def _finish():
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            self.stop_button.grid_remove()
-            self.stop_button.configure(state="normal")
-            self.progress_bar.set(0)
-            self.progress_label.configure(text="Transcription stopped by user.")
-            self.transcription_button.configure(state="normal")
-        self.after(0, _finish)
 
     def finish_error(self, error_msg):
         def _finish():
             shutil.rmtree(temp_dir, ignore_errors=True)
-            self.stop_button.grid_remove()
-            self.stop_button.configure(state="normal")
+            self.terminate_button.grid_remove()
+            self.terminate_button.configure(state="normal")
             self.progress_bar.set(0)
             self.progress_label.configure(text="Transcription failed.")
             self.transcription_button.configure(state="normal")
