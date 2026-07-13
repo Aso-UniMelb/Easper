@@ -8,6 +8,7 @@ from pathlib import Path
 from collections import Counter
 import concurrent.futures
 import time
+import math
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -90,9 +91,13 @@ class Wav2ElanTranscriber:
                     else:
                         generated = self.model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True, return_timestamps=True)
 
-                    import math
-                    scores = generated.scores
-                    sequences = generated.sequences
+                    # generated can be a dict (e.g. on macOS/newer transformers) or a ModelOutput object
+                    if isinstance(generated, dict):
+                        scores = generated.get("scores")
+                        sequences = generated.get("sequences")
+                    else:
+                        scores = getattr(generated, "scores", None)
+                        sequences = getattr(generated, "sequences", None)
                     prefix_len = sequences.size(1) - len(scores)
 
                     # Collect per-token IDs and log-probs
@@ -220,7 +225,6 @@ class Wav2ElanTranscriber:
                             generated = self.secondary_model.generate(input_features=input_features, language=self.LANG2, task='transcribe', return_dict_in_generate=True, output_scores=True, return_timestamps=True)
                         else:
                             generated = self.secondary_model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True, return_timestamps=True)
-                        import math
                         scores = generated.scores
                         sequences = generated.sequences
                         prefix_len = sequences.size(1) - len(scores)
