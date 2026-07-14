@@ -557,25 +557,23 @@ class Wav2ElanTranscriber:
         
         # Create main speaker tiers (always); word and confidence tiers only if requested
         tier_names = set()
+        has_words = set()
         for item in transcribed:
-            tier_names.add(item[2])
+            spk = item[2]
+            tier_names.add(spk)
+            if item[4]:  # has word annotations
+                has_words.add(spk)
+                
         for tier_name in sorted(tier_names):
             if tier_name not in eaf.get_tier_names():
                 eaf.add_tier(tier_name)
-
-        if self.output_confidence:
-            word_tier_names = set()
-            conf_tier_names = set()
-            for item in transcribed:
-                if item[4]:  # has word annotations
-                    word_tier_names.add(f"{item[2]}_words")
-                    conf_tier_names.add(f"{item[2]}_conf")
-            for tier_name in sorted(word_tier_names):
-                if tier_name not in eaf.get_tier_names():
-                    eaf.add_tier(tier_name)
-            for tier_name in sorted(conf_tier_names):
-                if tier_name not in eaf.get_tier_names():
-                    eaf.add_tier(tier_name)
+            if self.output_confidence and tier_name in has_words:
+                word_tier = f"{tier_name}_words"
+                conf_tier = f"{tier_name}_conf"
+                if word_tier not in eaf.get_tier_names():
+                    eaf.add_tier(word_tier)
+                if conf_tier not in eaf.get_tier_names():
+                    eaf.add_tier(conf_tier)
 
         for item in transcribed:
             s, e, spk, txt, wd = item
