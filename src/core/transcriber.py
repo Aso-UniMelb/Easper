@@ -103,8 +103,9 @@ class Wav2ElanTranscriber:
                     # On macOS / newer transformers, scores may be None when return_timestamps=True
                     # even if output_scores=True was requested. Fall back gracefully.
                     if scores is None:
-                        confidence_score = 0
-                        words_data = []
+                        token_ids = sequences[0].tolist()
+                        all_raw = self.tokenizer.convert_ids_to_tokens(token_ids)
+                        log_probs = [float('-inf')] * len(token_ids)
                     else:
                         prefix_len = sequences.size(1) - len(scores)
 
@@ -117,86 +118,86 @@ class Wav2ElanTranscriber:
                             logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
                             log_probs.append(logp)
 
-                        # Overall segment confidence (exclude timestamp / special tokens)
-                        text_logprobs = [lp for tok, lp in zip(all_raw, log_probs)
-                                         if tok and not (tok.startswith('<') and tok.endswith('>'))]
-                        avg_logprob = sum(text_logprobs) / len(text_logprobs) if text_logprobs else 0
-                        confidence_score = max(0, min(9, int(round(math.exp(avg_logprob) * 9))))
+                    # Overall segment confidence (exclude timestamp / special tokens)
+                    text_logprobs = [lp for tok, lp in zip(all_raw, log_probs)
+                                     if tok and not (tok.startswith('<') and tok.endswith('>'))]
+                    avg_logprob = sum(text_logprobs) / len(text_logprobs) if text_logprobs else 0
+                    confidence_score = max(0, min(9, int(round(math.exp(avg_logprob) * 9))))
 
-                        # Group tokens into words and compute per-word confidence.
-                        # IMPORTANT: decode each word's token IDs *together* — decoding one
-                        # token at a time breaks multi-byte Unicode (e.g. Arabic, Kurdish)
-                        # because a single character may span several byte-level BPE tokens.
-                        # Use convert_ids_to_tokens() only to detect word boundaries (Ġ / ▁),
-                        # never to produce the displayed text.
-                        words_with_scores = []
-                        cur_word_ids = []
-                        cur_logprobs = []
-                        for tid, tok, logp in zip(token_ids, all_raw, log_probs):
-                            if tok is None or (tok.startswith('<') and tok.endswith('>')):
-                                continue  # skip special / timestamp tokens
-                            is_boundary = tok.startswith('\u0120') or tok.startswith('\u2581')  # Ġ or ▁
-                            if is_boundary and cur_word_ids:
-                                word_text = self.tokenizer.decode(cur_word_ids, skip_special_tokens=True).strip()
-                                if word_text:
-                                    word_score = max(0, min(9, int(round(math.exp(sum(cur_logprobs) / len(cur_logprobs)) * 9))))
-                                    words_with_scores.append((word_text, word_score))
-                                cur_word_ids, cur_logprobs = [tid], [logp]
-                            else:
-                                cur_word_ids.append(tid)
-                                cur_logprobs.append(logp)
-                        if cur_word_ids:
+                    # Group tokens into words and compute per-word confidence.
+                    # IMPORTANT: decode each word's token IDs *together* — decoding one
+                    # token at a time breaks multi-byte Unicode (e.g. Arabic, Kurdish)
+                    # because a single character may span several byte-level BPE tokens.
+                    # Use convert_ids_to_tokens() only to detect word boundaries (Ġ / ▁),
+                    # never to produce the displayed text.
+                    words_with_scores = []
+                    cur_word_ids = []
+                    cur_logprobs = []
+                    for tid, tok, logp in zip(token_ids, all_raw, log_probs):
+                        if tok is None or (tok.startswith('<') and tok.endswith('>')):
+                            continue  # skip special / timestamp tokens
+                        is_boundary = tok.startswith('\u0120') or tok.startswith('\u2581')  # Ġ or ▁
+                        if is_boundary and cur_word_ids:
                             word_text = self.tokenizer.decode(cur_word_ids, skip_special_tokens=True).strip()
                             if word_text:
                                 word_score = max(0, min(9, int(round(math.exp(sum(cur_logprobs) / len(cur_logprobs)) * 9))))
                                 words_with_scores.append((word_text, word_score))
+                            cur_word_ids, cur_logprobs = [tid], [logp]
+                        else:
+                            cur_word_ids.append(tid)
+                            cur_logprobs.append(logp)
+                    if cur_word_ids:
+                        word_text = self.tokenizer.decode(cur_word_ids, skip_special_tokens=True).strip()
+                        if word_text:
+                            word_score = max(0, min(9, int(round(math.exp(sum(cur_logprobs) / len(cur_logprobs)) * 9))))
+                            words_with_scores.append((word_text, word_score))
 
-                        # Extract word-level timestamps from Whisper's <|t.tt|> timestamp tokens.
-                        # tokenizer.decode(..., output_offsets=True) parses them and returns time
-                        # offsets relative to this segment's local start (0 = segment start).
-                        words_data = []
-                        try:
-                            offset_result = self.tokenizer.decode(sequences[0].tolist(), output_offsets=True)
-                            ts_chunks = offset_result.get('offsets', [])
-                        except Exception:
-                            ts_chunks = []
+                    # Extract word-level timestamps from Whisper's <|t.tt|> timestamp tokens.
+                    # tokenizer.decode(..., output_offsets=True) parses them and returns time
+                    # offsets relative to this segment's local start (0 = segment start).
+                    words_data = []
+                    try:
+                        offset_result = self.tokenizer.decode(sequences[0].tolist(), output_offsets=True)
+                        ts_chunks = offset_result.get('offsets', [])
+                    except Exception:
+                        ts_chunks = []
 
-                        if ts_chunks and words_with_scores:
-                            seg_dur = end - start
-                            word_idx = 0
-                            for chunk in ts_chunks:
-                                c_text = chunk.get('text', '').strip()
-                                ts = chunk.get('timestamp', (None, None))
-                                c_local_start = ts[0] if ts[0] is not None else 0.0
-                                c_local_end = ts[1] if ts[1] is not None else seg_dur
-                                c_local_end = min(c_local_end, seg_dur)
-                                cw = [w for w in c_text.split() if w]
-                                n = len(cw)
-                                if n == 0 or word_idx >= len(words_with_scores):
-                                    continue
-                                # Collect the n words that map to this chunk
-                                chunk_words = [words_with_scores[word_idx + i]
-                                               for i in range(n)
-                                               if word_idx + i < len(words_with_scores)]
-                                # Distribute chunk duration proportionally by character length
-                                total_chars = sum(len(wt) for wt, _ in chunk_words) or 1
-                                chunk_dur = c_local_end - c_local_start
-                                t = c_local_start
-                                for wt, ws in chunk_words:
-                                    prop_dur = chunk_dur * (len(wt) / total_chars)
-                                    words_data.append((wt, ws, start + t, start + t + prop_dur))
-                                    t += prop_dur
-                                    word_idx += 1
-
-                        # Fallback: distribute proportionally by character length across the segment
-                        if not words_data and words_with_scores:
-                            total_chars = sum(len(wt) for wt, _ in words_with_scores) or 1
-                            seg_dur = end - start
-                            t = 0.0
-                            for wt, ws in words_with_scores:
-                                prop_dur = seg_dur * (len(wt) / total_chars)
+                    if ts_chunks and words_with_scores:
+                        seg_dur = end - start
+                        word_idx = 0
+                        for chunk in ts_chunks:
+                            c_text = chunk.get('text', '').strip()
+                            ts = chunk.get('timestamp', (None, None))
+                            c_local_start = ts[0] if ts[0] is not None else 0.0
+                            c_local_end = ts[1] if ts[1] is not None else seg_dur
+                            c_local_end = min(c_local_end, seg_dur)
+                            cw = [w for w in c_text.split() if w]
+                            n = len(cw)
+                            if n == 0 or word_idx >= len(words_with_scores):
+                                continue
+                            # Collect the n words that map to this chunk
+                            chunk_words = [words_with_scores[word_idx + i]
+                                           for i in range(n)
+                                           if word_idx + i < len(words_with_scores)]
+                            # Distribute chunk duration proportionally by character length
+                            total_chars = sum(len(wt) for wt, _ in chunk_words) or 1
+                            chunk_dur = c_local_end - c_local_start
+                            t = c_local_start
+                            for wt, ws in chunk_words:
+                                prop_dur = chunk_dur * (len(wt) / total_chars)
                                 words_data.append((wt, ws, start + t, start + t + prop_dur))
                                 t += prop_dur
+                                word_idx += 1
+
+                    # Fallback: distribute proportionally by character length across the segment
+                    if not words_data and words_with_scores:
+                        total_chars = sum(len(wt) for wt, _ in words_with_scores) or 1
+                        seg_dur = end - start
+                        t = 0.0
+                        for wt, ws in words_with_scores:
+                            prop_dur = seg_dur * (len(wt) / total_chars)
+                            words_data.append((wt, ws, start + t, start + t + prop_dur))
+                            t += prop_dur
 
             elif self.model_basename.startswith(('xls', 'mms')):
                 inputs = self.processor([audio_segment], sampling_rate=16000, return_tensors="pt", padding=True, return_attention_mask=True)
@@ -245,8 +246,9 @@ class Wav2ElanTranscriber:
                         # On macOS / newer transformers, scores may be None when return_timestamps=True
                         # even if output_scores=True was requested. Fall back gracefully.
                         if scores is None:
-                            confidence_score2 = 0
-                            words_data2 = []
+                            token_ids2 = sequences[0].tolist()
+                            all_raw2 = self.secondary_tokenizer.convert_ids_to_tokens(token_ids2)
+                            log_probs2 = [float('-inf')] * len(token_ids2)
                         else:
                             prefix_len = sequences.size(1) - len(scores)
 
@@ -258,76 +260,76 @@ class Wav2ElanTranscriber:
                                 logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
                                 log_probs2.append(logp)
 
-                            # Overall segment confidence (exclude timestamp / special tokens)
-                            text_logprobs2 = [lp for tok, lp in zip(all_raw2, log_probs2)
-                                              if tok and not (tok.startswith('<') and tok.endswith('>'))]
-                            avg_logprob2 = sum(text_logprobs2) / len(text_logprobs2) if text_logprobs2 else 0
-                            confidence_score2 = max(0, min(9, int(round(math.exp(avg_logprob2) * 9))))
+                        # Overall segment confidence (exclude timestamp / special tokens)
+                        text_logprobs2 = [lp for tok, lp in zip(all_raw2, log_probs2)
+                                          if tok and not (tok.startswith('<') and tok.endswith('>'))]
+                        avg_logprob2 = sum(text_logprobs2) / len(text_logprobs2) if text_logprobs2 else 0
+                        confidence_score2 = max(0, min(9, int(round(math.exp(avg_logprob2) * 9))))
 
-                            # Group tokens into words and compute per-word confidence
-                            words_with_scores2 = []
-                            cur_word_ids2 = []
-                            cur_logprobs2 = []
-                            for tid, tok, logp in zip(token_ids2, all_raw2, log_probs2):
-                                if tok is None or (tok.startswith('<') and tok.endswith('>')):
-                                    continue
-                                is_boundary = tok.startswith('\u0120') or tok.startswith('\u2581')
-                                if is_boundary and cur_word_ids2:
-                                    word_text2 = self.secondary_tokenizer.decode(cur_word_ids2, skip_special_tokens=True).strip()
-                                    if word_text2:
-                                        word_score2 = max(0, min(9, int(round(math.exp(sum(cur_logprobs2) / len(cur_logprobs2)) * 9))))
-                                        words_with_scores2.append((word_text2, word_score2))
-                                    cur_word_ids2, cur_logprobs2 = [tid], [logp]
-                                else:
-                                    cur_word_ids2.append(tid)
-                                    cur_logprobs2.append(logp)
-                            if cur_word_ids2:
+                        # Group tokens into words and compute per-word confidence
+                        words_with_scores2 = []
+                        cur_word_ids2 = []
+                        cur_logprobs2 = []
+                        for tid, tok, logp in zip(token_ids2, all_raw2, log_probs2):
+                            if tok is None or (tok.startswith('<') and tok.endswith('>')):
+                                continue
+                            is_boundary = tok.startswith('\u0120') or tok.startswith('\u2581')
+                            if is_boundary and cur_word_ids2:
                                 word_text2 = self.secondary_tokenizer.decode(cur_word_ids2, skip_special_tokens=True).strip()
                                 if word_text2:
                                     word_score2 = max(0, min(9, int(round(math.exp(sum(cur_logprobs2) / len(cur_logprobs2)) * 9))))
                                     words_with_scores2.append((word_text2, word_score2))
+                                cur_word_ids2, cur_logprobs2 = [tid], [logp]
+                            else:
+                                cur_word_ids2.append(tid)
+                                cur_logprobs2.append(logp)
+                        if cur_word_ids2:
+                            word_text2 = self.secondary_tokenizer.decode(cur_word_ids2, skip_special_tokens=True).strip()
+                            if word_text2:
+                                word_score2 = max(0, min(9, int(round(math.exp(sum(cur_logprobs2) / len(cur_logprobs2)) * 9))))
+                                words_with_scores2.append((word_text2, word_score2))
 
-                            # Extract word-level timestamps
-                            words_data2 = []
-                            try:
-                                offset_result2 = self.secondary_tokenizer.decode(sequences[0].tolist(), output_offsets=True)
-                                ts_chunks2 = offset_result2.get('offsets', [])
-                            except Exception:
-                                ts_chunks2 = []
+                        # Extract word-level timestamps
+                        words_data2 = []
+                        try:
+                            offset_result2 = self.secondary_tokenizer.decode(sequences[0].tolist(), output_offsets=True)
+                            ts_chunks2 = offset_result2.get('offsets', [])
+                        except Exception:
+                            ts_chunks2 = []
 
-                            if ts_chunks2 and words_with_scores2:
-                                seg_dur = end - start
-                                word_idx2 = 0
-                                for chunk in ts_chunks2:
-                                    c_text = chunk.get('text', '').strip()
-                                    ts = chunk.get('timestamp', (None, None))
-                                    c_local_start = ts[0] if ts[0] is not None else 0.0
-                                    c_local_end = ts[1] if ts[1] is not None else seg_dur
-                                    c_local_end = min(c_local_end, seg_dur)
-                                    cw = [w for w in c_text.split() if w]
-                                    n = len(cw)
-                                    if n == 0 or word_idx2 >= len(words_with_scores2):
-                                        continue
-                                    chunk_words2 = [words_with_scores2[word_idx2 + i]
-                                                    for i in range(n)
-                                                    if word_idx2 + i < len(words_with_scores2)]
-                                    total_chars2 = sum(len(wt) for wt, _ in chunk_words2) or 1
-                                    chunk_dur = c_local_end - c_local_start
-                                    t = c_local_start
-                                    for wt, ws in chunk_words2:
-                                        prop_dur = chunk_dur * (len(wt) / total_chars2)
-                                        words_data2.append((wt, ws, start + t, start + t + prop_dur))
-                                        t += prop_dur
-                                        word_idx2 += 1
-
-                            if not words_data2 and words_with_scores2:
-                                total_chars2 = sum(len(wt) for wt, _ in words_with_scores2) or 1
-                                seg_dur = end - start
-                                t = 0.0
-                                for wt, ws in words_with_scores2:
-                                    prop_dur = seg_dur * (len(wt) / total_chars2)
+                        if ts_chunks2 and words_with_scores2:
+                            seg_dur = end - start
+                            word_idx2 = 0
+                            for chunk in ts_chunks2:
+                                c_text = chunk.get('text', '').strip()
+                                ts = chunk.get('timestamp', (None, None))
+                                c_local_start = ts[0] if ts[0] is not None else 0.0
+                                c_local_end = ts[1] if ts[1] is not None else seg_dur
+                                c_local_end = min(c_local_end, seg_dur)
+                                cw = [w for w in c_text.split() if w]
+                                n = len(cw)
+                                if n == 0 or word_idx2 >= len(words_with_scores2):
+                                    continue
+                                chunk_words2 = [words_with_scores2[word_idx2 + i]
+                                                for i in range(n)
+                                                if word_idx2 + i < len(words_with_scores2)]
+                                total_chars2 = sum(len(wt) for wt, _ in chunk_words2) or 1
+                                chunk_dur = c_local_end - c_local_start
+                                t = c_local_start
+                                for wt, ws in chunk_words2:
+                                    prop_dur = chunk_dur * (len(wt) / total_chars2)
                                     words_data2.append((wt, ws, start + t, start + t + prop_dur))
                                     t += prop_dur
+                                    word_idx2 += 1
+
+                        if not words_data2 and words_with_scores2:
+                            total_chars2 = sum(len(wt) for wt, _ in words_with_scores2) or 1
+                            seg_dur = end - start
+                            t = 0.0
+                            for wt, ws in words_with_scores2:
+                                prop_dur = seg_dur * (len(wt) / total_chars2)
+                                words_data2.append((wt, ws, start + t, start + t + prop_dur))
+                                t += prop_dur
 
                 elif self.secondary_basename.startswith(('xls', 'mms')):
                     inputs = self.secondary_processor([audio_segment], sampling_rate=16000, return_tensors="pt", padding=True, return_attention_mask=True)
