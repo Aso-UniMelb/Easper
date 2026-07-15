@@ -1,5 +1,5 @@
 #define MyAppName "Easper"
-#define MyAppVersion "0.1"
+#define MyAppVersion "0.2"
 #define MyAppPublisher "Easper Research Group"
 #define MyAppURL "https://github.com/Aso-UniMelb/Easper"
 #define MyAppExeName "EasperInstaller.exe"
@@ -18,6 +18,9 @@ OutputBaseFilename=Easper_Setup
 SetupIconFile="icon.ico"
 Compression=lzma2
 SolidCompression=yes
+LZMAUseSeparateProcess=yes
+LZMANumBlockThreads=8
+CompressionThreads=auto
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest

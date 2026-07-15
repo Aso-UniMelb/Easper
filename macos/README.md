@@ -4,24 +4,27 @@ This directory contains the automation script to prepare your macOS system for E
 
 ## 🚀 Quick Start
 
-1. **Open Terminal** in this folder (or the root folder).
-2. **Run the setup script**:
+1. **Open Terminal** in the root folder of the project.
+2. **Run the setup script** (type `y` if prompted in the terminal to install Homebrew/dependencies):
    ```bash
    bash macos/setup.sh
+   ```
+3. **Download the Whisper-small model**:
+   ```bash
+   source venv/bin/activate
+   python download-whisper-small.py
+   ```
+4. **Run the App**:
+   ```bash
+   bash run-macos.sh
    ```
 
 ## 📋 What the script does:
 - Checks for **Homebrew** and installs it if missing.
-- Installs **Python 3.11** via Homebrew.
+- Installs **Python 3.12** and Tkinter bindings via Homebrew.
 - Installs **FFmpeg** (version 7+).
 - Creates a **virtual environment (`venv`)** in the project root.
 - Installs all dependencies from `requirements.txt`.
-
-## 🛠️ Manual Usage
-Once the setup is complete, you can start Easper by running:
-```bash
-bash run-macos.sh
-```
 
 ---
 

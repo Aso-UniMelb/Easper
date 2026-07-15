@@ -18,23 +18,30 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 
 ## 📥 Installation
 
-### Option 1: Using the Installer (Windows Only) - Recommended
+### On Windows
 1. Navigate to the [Easper Releases](https://github.com/Aso-UniMelb/Easper/releases).
 2. Download the latest `Easper_Setup.exe`.
 3. Run the installer and follow the on-screen instructions.
 
-### Option 2: Using the Setup Script (macOS)
+### On macOS
+For more detailed information, see the [macOS README](./macos/README.md).
+
 1. **Clone the Repository**:
    ```bash
    git clone https://github.com/Aso-UniMelb/Easper.git
    cd Easper
    ```
-2. **Run the Setup Script**:
+2. **Run the Setup Script** (type `y` if prompted in the terminal):
    ```bash
    bash macos/setup.sh
    ```
-
-### Option 3: Manual Installation (Development)
+3. **Run Python Code to Download whisper-small**:
+   ```bash
+   source venv/bin/activate
+   python download-whisper-small.py
+   ```
+   
+### On Linux (Manual Installation)
 1. **Install FFmpeg**: Ensure [FFmpeg 7.1.1+](https://ffmpeg.org/download.html) is installed and added to your system `PATH`.
 2. **Install Python**: Python 3.11 or higher is required.
 3. **Clone the Repository**:
@@ -49,20 +56,29 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 
 ---
 
-## 🛠️ Usage
+## 🖥️ Usage: Graphical User Interface
+On Windows, double click Easper icon (on desktop or start menu) to run the GUI.
 
-### 🖥️ GUI Mode
-Simply run the main script without arguments to launch the graphical interface:
-```bash
-python src/main.py
-```
-
-**Shortcut (macOS/Linux):**
+On macOS and Linux, open terminal, navigate to the Easper directory and run the following command:
 ```bash
 bash run-macos.sh
 ```
+---
 
-### ⌨️ Command Line Interface
+## 🔧 Build your own ASR Model (Fine-Tuning)
+
+After building the zip speech dataset from ELAN files, you can build your own transcription model using Google Colab:
+
+1. **Upload Dataset**: Go to your [Google Drive](https://drive.google.com) and upload the generated dataset `.zip` file into the folder named `Colab` located in the root directory.
+2. **Open Colab Notebook**: Open the Google Colab notebook at **[Google Colab Notebook](https://colab.research.google.com/drive/1vRt5T4FHj_z3KHv0_Z4fReHYW8IMOxNv?usp=sharing)** and follow the instructions.
+3. **Training & Output**: After 30 to 60 minutes (depending on the dataset length), the trained model will be saved as a `.zip` file in the root folder of your Google Drive.
+4. **Deploy Model**:
+   - Download the model `.zip` file from Google Drive.
+   - Unzip it into the `user_models` folder in the Easper application directory.
+5. **Restart Easper**: Restart Easper to see the new model in the list of available models for transcription.
+
+---
+### ⌨️ Usage: Command Line Interface
 
 **Transcribe audio to ELAN:**
 ```bash
@@ -80,23 +96,7 @@ python src/main.py --help
 python src/main.py transcribe --help
 python src/main.py dataset --help
 ```
-
 ---
-
-## 🔧 Fine-Tuning the Model
-
-After building the zip speech dataset from ELAN files, you can build your own transcription model using Google Colab:
-
-1. **Upload Dataset**: Go to your [Google Drive](https://drive.google.com) and upload the generated dataset `.zip` file into the folder named `Colab` located in the root directory.
-2. **Open Colab Notebook**: Open the Google Colab notebook at **[Google Colab Notebook](https://colab.research.google.com/drive/1vRt5T4FHj_z3KHv0_Z4fReHYW8IMOxNv?usp=sharing)** and follow the instructions.
-3. **Training & Output**: After 30 to 60 minutes (depending on the dataset length), the trained model will be saved as a `.zip` file in the root folder of your Google Drive.
-4. **Deploy Model**:
-   - Download the model `.zip` file from Google Drive.
-   - Unzip it into the `user_models` folder in the Easper application directory.
-5. **Restart Easper**: Restart Easper to see the new model in the list of available models for transcription.
-
----
-
 ## 👥 Authors & Citation
 
 Easper is developed at **The University of Melbourne**.

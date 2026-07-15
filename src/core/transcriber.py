@@ -89,7 +89,7 @@ class Wav2ElanTranscriber:
                     else:
                         generated = self.model.generate(input_features=input_features, return_dict_in_generate=True, output_scores=True, return_timestamps=True)
 
-                    # generated can be a dict (e.g. on macOS/newer transformers) or a ModelOutput object
+                    # generated can be a dict (e.g. on newer transformers) or a ModelOutput object
                     if isinstance(generated, dict):
                         scores = generated.get("scores")
                         sequences = generated.get("sequences")
@@ -100,23 +100,16 @@ class Wav2ElanTranscriber:
                     text = self.tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
                     seg_text = text  # clean text → main speaker tier (no embedded scores)
 
-                    # On macOS / newer transformers, scores may be None when return_timestamps=True
-                    # even if output_scores=True was requested. Fall back gracefully.
-                    if scores is None:
-                        token_ids = sequences[0].tolist()
-                        all_raw = self.tokenizer.convert_ids_to_tokens(token_ids)
-                        log_probs = [float('-inf')] * len(token_ids)
-                    else:
-                        prefix_len = sequences.size(1) - len(scores)
+                    prefix_len = sequences.size(1) - len(scores)
 
-                        # Collect per-token IDs and log-probs
-                        token_ids = sequences[0, prefix_len:].tolist()
-                        all_raw = self.tokenizer.convert_ids_to_tokens(token_ids)
-                        log_probs = []
-                        for t, score_t in enumerate(scores):
-                            token_id = sequences[0, prefix_len + t]
-                            logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
-                            log_probs.append(logp)
+                    # Collect per-token IDs and log-probs
+                    token_ids = sequences[0, prefix_len:].tolist()
+                    all_raw = self.tokenizer.convert_ids_to_tokens(token_ids)
+                    log_probs = []
+                    for t, score_t in enumerate(scores):
+                        token_id = sequences[0, prefix_len + t]
+                        logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
+                        log_probs.append(logp)
 
                     # Overall segment confidence (exclude timestamp / special tokens)
                     text_logprobs = [lp for tok, lp in zip(all_raw, log_probs)
@@ -243,22 +236,15 @@ class Wav2ElanTranscriber:
                         text2 = self.secondary_tokenizer.batch_decode(sequences, skip_special_tokens=True)[0].strip()
                         seg_text2 = text2  # clean text → main tier
 
-                        # On macOS / newer transformers, scores may be None when return_timestamps=True
-                        # even if output_scores=True was requested. Fall back gracefully.
-                        if scores is None:
-                            token_ids2 = sequences[0].tolist()
-                            all_raw2 = self.secondary_tokenizer.convert_ids_to_tokens(token_ids2)
-                            log_probs2 = [float('-inf')] * len(token_ids2)
-                        else:
-                            prefix_len = sequences.size(1) - len(scores)
+                        prefix_len = sequences.size(1) - len(scores)
 
-                            token_ids2 = sequences[0, prefix_len:].tolist()
-                            all_raw2 = self.secondary_tokenizer.convert_ids_to_tokens(token_ids2)
-                            log_probs2 = []
-                            for t, score_t in enumerate(scores):
-                                token_id = sequences[0, prefix_len + t]
-                                logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
-                                log_probs2.append(logp)
+                        token_ids2 = sequences[0, prefix_len:].tolist()
+                        all_raw2 = self.secondary_tokenizer.convert_ids_to_tokens(token_ids2)
+                        log_probs2 = []
+                        for t, score_t in enumerate(scores):
+                            token_id = sequences[0, prefix_len + t]
+                            logp = torch.log_softmax(score_t, dim=-1)[0, token_id].item()
+                            log_probs2.append(logp)
 
                         # Overall segment confidence (exclude timestamp / special tokens)
                         text_logprobs2 = [lp for tok, lp in zip(all_raw2, log_probs2)
