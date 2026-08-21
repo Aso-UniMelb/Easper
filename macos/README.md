@@ -4,7 +4,11 @@ This directory contains the automation script to prepare your macOS system for E
 
 ## 🚀 Quick Start
 
-1. **Open Terminal** in the root folder of the project.
+1. **Open Terminal** in the root folder of the project and **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Aso-UniMelb/Easper.git
+   cd Easper
+   ```
 2. **Run the setup script** (type `y` if prompted in the terminal to install Homebrew/dependencies):
    ```bash
    bash macos/setup.sh
@@ -19,7 +23,7 @@ This directory contains the automation script to prepare your macOS system for E
    bash run-macos.sh
    ```
 
-## 📋 What the script does:
+## 📋 What the macOS setup script does:
 - Checks for **Homebrew** and installs it if missing.
 - Installs **Python 3.12** and Tkinter bindings via Homebrew.
 - Installs **FFmpeg** (version 7+).
