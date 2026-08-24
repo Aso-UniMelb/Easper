@@ -227,7 +227,7 @@ def download_and_apply_update(download_url: str = None, progress_callback=None) 
                 shutil.copy2(src_file, dest_file)
 
         # Copy top-level metadata files if present in update
-        for meta_file in ["version.json", "requirements.txt", "download-whisper-small.py", "README.md"]:
+        for meta_file in ["version.json", "requirements.txt", "README.md"]:
             src_meta = extracted_root / meta_file
             if src_meta.is_file():
                 shutil.copy2(src_meta, base_path / meta_file)

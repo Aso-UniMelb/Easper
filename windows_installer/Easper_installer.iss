@@ -1,8 +1,7 @@
 #define MyAppName "Easper"
-#define MyAppVersion "0.2"
-#define MyAppPublisher "Easper Research Group"
+#define MyAppVersion "0.3.0"
+#define MyAppPublisher "Aso Mahmudi"
 #define MyAppURL "https://github.com/Aso-UniMelb/Easper"
-#define MyAppExeName "EasperInstaller.exe"
 
 [Setup]
 AppName={#MyAppName}
@@ -14,7 +13,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={localappdata}\{#MyAppName}
 UninstallDisplayIcon={app}\icon.ico
 DefaultGroupName={#MyAppName}
-OutputBaseFilename=Easper_Setup
+OutputBaseFilename=Easper_Setup_{#MyAppVersion}
 SetupIconFile="icon.ico"
 Compression=lzma2
 SolidCompression=yes
@@ -30,10 +29,8 @@ WizardStyle=modern
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Easper.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build-venv.bat"; DestDir: "{app}"; Flags: ignoreversion
-Source: "download-whisper-small.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "ffmpeg-7.1.1-full_build\*"; DestDir: "{app}\ffmpeg"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\download-whisper-small.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\windows_installer\pip_packages\*"; DestDir: "{app}\pip_packages"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\user_models\*"; DestDir: "{app}\user_models"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -13,12 +13,7 @@ This directory contains the automation script to prepare your macOS system for E
    ```bash
    bash macos/setup.sh
    ```
-3. **Download the Whisper-small model**:
-   ```bash
-   source venv/bin/activate
-   python download-whisper-small.py
-   ```
-4. **Run the App**:
+3. **Run the App**:
    ```bash
    bash run-macos.sh
    ```

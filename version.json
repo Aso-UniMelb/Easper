@@ -1,6 +1,6 @@
 {
-  "version": "0.2.0",
-  "release_date": "2026-07-15",
-  "changelog": "Second beta release with In-App Updater, ASR models, diarization, and ELAN dataset generation tools.",
+  "version": "0.3.0",
+  "release_date": "2026-08-24",
+  "changelog": "Third Beta release: UI Redesigned",
   "min_python": "3.11"
 }

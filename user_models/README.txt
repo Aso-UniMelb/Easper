@@ -8,12 +8,10 @@ If you have just cloned the repository, this directory is empty except for this 
 ------------------------------------------------------------------------
 1. How to get the default Whisper Small model
 ------------------------------------------------------------------------
-To quickly download the standard multilingual "Whisper Small" model:
-Run the script `download-whisper-small.py` located in the root folder of Easper:
+You can download the standard multilingual "Whisper Small" model directly 
+from within the Easper Transcriber UI with a single click.
 
-    python download-whisper-small.py
-
-This will download the model and save it to:
+The model will be downloaded and saved to:
     user_models/whisper-small/
 
 ------------------------------------------------------------------------

@@ -26,19 +26,14 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 ### On macOS
 For more detailed information, see the [macOS README](./macos/README.md).
 
-1. **Clone the Repository**:
+1. **Open Terminal** and **Clone the Repository**:
    ```bash
    git clone https://github.com/Aso-UniMelb/Easper.git
    cd Easper
    ```
-2. **Run the Setup Script** (type `y` if prompted in the terminal):
+2. **Run the setup script** (type `y` if prompted in the terminal to install dependencies):
    ```bash
    bash macos/setup.sh
-   ```
-3. **Run Python Code to Download whisper-small**:
-   ```bash
-   source venv/bin/activate
-   python download-whisper-small.py
    ```
    
 ### On Linux (Manual Installation)
