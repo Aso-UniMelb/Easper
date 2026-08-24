@@ -1,6 +1,7 @@
 # GUI
 customtkinter
 Pillow
+tkinterdnd2
 
 # Audio Processing
 pydub

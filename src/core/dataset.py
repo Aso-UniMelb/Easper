@@ -11,12 +11,39 @@ import zipfile
 import shutil
 
 def get_wav_file(elan_file_path):
+    """Find the corresponding audio file for an ELAN .eaf file."""
+    if not elan_file_path or not os.path.exists(elan_file_path):
+        return None
     directory = os.path.dirname(elan_file_path)
-    filename = os.path.basename(elan_file_path).lower()
-    wav_path = filename.replace('.eaf', '.wav')
-    files = [f for f in os.listdir(directory) if f.lower() == wav_path]
-    if files:
-        return os.path.join(directory, files[0])
+    base = os.path.splitext(os.path.basename(elan_file_path))[0].lower()
+    
+    try:
+        dir_files = os.listdir(directory)
+    except Exception:
+        dir_files = []
+        
+    # 1. Check same directory for matching name with common audio extensions
+    for ext in ['.wav', '.mp3', '.flac', '.m4a', '.ogg']:
+        target = f"{base}{ext}"
+        for f in dir_files:
+            if f.lower() == target:
+                return os.path.join(directory, f)
+                
+    # 2. Check ELAN linked media descriptors
+    try:
+        eaf = pympi.Elan.Eaf(elan_file_path)
+        for file_info in eaf.get_linked_files():
+            media_url = file_info.get('MEDIA_URL') or file_info.get('RELATIVE_MEDIA_URL') or ''
+            if media_url:
+                clean_url = media_url.replace('file:///', '').replace('file://', '')
+                cand1 = os.path.join(directory, os.path.basename(clean_url))
+                if os.path.isfile(cand1):
+                    return cand1
+                if os.path.isfile(clean_url):
+                    return clean_url
+    except Exception:
+        pass
+
     return None
 
 def load_replacements(tsv_path):
@@ -49,7 +76,7 @@ def load_replacements(tsv_path):
         pass
     return replacements
 
-def build_training_dataset(elan_files, tier_vars, output_folder, progress_callback=None, log_callback=None, char_freqs=None, word_freqs=None, replacements_file=None):
+def build_training_dataset(elan_files, tier_vars, output_folder, progress_callback=None, log_callback=None, replacements_file=None):
     """
     Build training dataset from ELAN files.
     
@@ -59,8 +86,6 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
         output_folder: Output folder path
         progress_callback: Optional callback for progress updates (current, total)
         log_callback: Optional callback for logging messages
-        char_freqs: Optional character frequencies text
-        word_freqs: Optional word frequencies text
         replacements_file: Optional path to a TSV file with find and replace regex rules
     
     Returns:
@@ -71,14 +96,6 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
     os.makedirs(temp_folder, exist_ok=True)
     
     replacements = load_replacements(replacements_file)
-    
-    if char_freqs:
-        with open(os.path.join(temp_folder, "character_frequencies.txt"), "w", encoding="utf-8") as f:
-            f.write(char_freqs)
-            
-    if word_freqs:
-        with open(os.path.join(temp_folder, "word_frequencies.txt"), "w", encoding="utf-8") as f:
-            f.write(word_freqs)
 
     tsv_path = f'{temp_folder}/metadata.tsv'
     with open(tsv_path, "w", encoding="utf-8") as wfile:    
@@ -150,7 +167,7 @@ def build_training_dataset(elan_files, tier_vars, output_folder, progress_callba
                 if media_url.lower().endswith('.wav'):
                     offset = int(file_info.get('TIME_ORIGIN', 0)) # in milliseconds
 
-            audio = AudioSegment.from_wav(wav_path)
+            audio = AudioSegment.from_file(wav_path)
             audio = audio[offset:]
             audio = audio.set_channels(1)
             audio = audio.set_frame_rate(16000)

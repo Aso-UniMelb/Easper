@@ -338,20 +338,46 @@ class Wav2ElanTranscriber:
                 else:
                     results.append((start, end, secondary_speaker, "", None))
 
-            # Update progress
+            # Format segment time interval (e.g. 00:02-00:05)
+            s_abs = start + getattr(self, "start_time_offset", 0.0)
+            e_abs = end + getattr(self, "start_time_offset", 0.0)
+
+            def _fmt_ts(sec):
+                sec = max(0, float(sec))
+                m, s = divmod(int(sec), 60)
+                h, m = divmod(m, 60)
+                if h > 0:
+                    return f"{h:02d}:{m:02d}:{s:02d}"
+                return f"{m:02d}:{s:02d}"
+
+            time_range_str = f"{_fmt_ts(s_abs)}-{_fmt_ts(e_abs)}"
+
+            # Update progress smoothly across Step 2/3 (0.30 -> 0.90) (60% weight)
             self.current_segment = self.current_segment + 1
             if self.progress_callback:
-                self.progress_callback(self.current_segment, self.total_segments, f"Segment {self.current_segment}/{self.total_segments} Transcribed", main_text)
+                progress_fraction = 0.30 + (0.60 * (self.current_segment / max(1, self.total_segments)))
+                preview_data = {
+                    "time": time_range_str,
+                    "text": main_text,
+                    "speaker": speaker
+                }
+                self.progress_callback(
+                    progress_fraction, 1.0,
+                    f"[Step 2/3: Speech Recognition] Transcribing segment {self.current_segment}/{self.total_segments}",
+                    preview_data
+                )
             else:
-                print(f"Segment {index+1}: {main_text}")
+                print(f"Segment {index+1} [{time_range_str}]: {main_text}")
             
             return results
 
     def transcribe_audio(self, file_path, min_on=0.5, min_off=0.5, progress_callback=None, only_segment=False, segments_file=None, start_time=0, end_time=None):
         self.progress_callback = progress_callback
+        self.start_time_offset = start_time or 0.0
+        total_steps = 2 if only_segment else 3
 
         if progress_callback:
-            progress_callback(0, 0, "...", "...")
+            progress_callback(0.05, 1.0, f"[Step 1/{total_steps}: Segmentation] Preparing audio file...")
         os.makedirs(temp_dir, exist_ok=True)
         temp_file_path = self.convert_to_mono_16k(file_path, start_time, end_time)
         
@@ -362,7 +388,7 @@ class Wav2ElanTranscriber:
 
         if segments_file:
             if progress_callback:
-                progress_callback(0, 0, f"Loading segments from {segments_file}...")
+                progress_callback(0.18, 1.0, f"[Step 1/{total_steps}: Segmentation] Loading segments from ELAN file...")
             else:
                 print(f"Loading segments from {segments_file}...")
             
@@ -388,9 +414,11 @@ class Wav2ElanTranscriber:
             # Sort by start time
             utterances.sort(key=lambda x: x[0])
             self.num_speakers = len(speakers)
+            if progress_callback:
+                progress_callback(0.30, 1.0, f"[Step 1/{total_steps}: Segmentation] Found {len(utterances)} segment(s)")
         else:
             if progress_callback:
-                progress_callback(0, 0, f"Segmenting...")
+                progress_callback(0.15, 1.0, f"[Step 1/{total_steps}: Segmentation] Running VAD / Diarization ({self.segmentation_model})...")
             else:
                 print(f"Segmenting...")
             
@@ -401,6 +429,8 @@ class Wav2ElanTranscriber:
 
             utterances = segments_cleanup(init_segments, min_segment=min_on, min_silence=min_off)
             speakers = [f"Speaker_{int(i)}" for i in range(self.num_speakers)]
+            if progress_callback:
+                progress_callback(0.30, 1.0, f"[Step 1/{total_steps}: Segmentation] Found {len(utterances)} segment(s)")
 
         #=============
         
@@ -419,12 +449,14 @@ class Wav2ElanTranscriber:
             # Mock times to avoid errors in report
             self.time_records['loading_asr'] = time.time()
             self.time_records['transcribing'] = time.time()
+            if progress_callback:
+                progress_callback(0.85, 1.0, f"[Step 2/2: Generating ELAN File] Preparing {len(transcribed)} segment annotations...")
 
         else:
             self.time_records['loading_asr'] = time.time()
             
             if self.progress_callback:
-                self.progress_callback(0, 0, f"Loading ASR model(s)...")
+                self.progress_callback(0.28, 1.0, f"[Step 2/3: Speech Recognition] Loading ASR model ({self.model_basename})...")
             else:
                 print(f"Loading ASR model(s)...")
             # Lazy import of heavy libraries
@@ -529,6 +561,8 @@ class Wav2ElanTranscriber:
 
         # --- Create ELAN (.eaf) and Text (.txt) Files ---                
         self.time_records['storing'] = time.time()
+        if self.progress_callback:
+            self.progress_callback(0.92, 1.0, f"[Step {total_steps}/{total_steps}: Generating ELAN File] Constructing tiers and annotations...")
         import pympi
         import re
         output_eaf = re.sub(r'\.(wav|mp4)', '.eaf', file_path)
@@ -578,12 +612,12 @@ class Wav2ElanTranscriber:
                         eaf.add_annotation(conf_tier, t_start, t_end, f"{ws}{oov}")
         eaf.to_file(output_eaf)
         
-        if not only_segment:
-            with open(output_txt, 'w', encoding='utf-8') as f:
-                for item in transcribed:
-                    s, e, spk, txt = item[0], item[1], item[2], item[3]
-                    txt = txt.strip()
-                    f.write(f"{convert_seconds_to_ms(s)}\t{convert_seconds_to_ms(e)}\t{spk}\t{txt}\n")
+        # if not only_segment:
+        #     with open(output_txt, 'w', encoding='utf-8') as f:
+        #         for item in transcribed:
+        #             s, e, spk, txt = item[0], item[1], item[2], item[3]
+        #             txt = txt.strip()
+        #             f.write(f"{convert_seconds_to_ms(s)}\t{convert_seconds_to_ms(e)}\t{spk}\t{txt}\n")
 
         self.time_records['end'] = time.time()
         time_report = '=====Time Report (min:sec)=====\n'
