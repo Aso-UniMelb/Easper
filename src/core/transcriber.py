@@ -332,7 +332,7 @@ class Wav2ElanTranscriber:
                     seg_text2 = ""
                     words_data2 = None
 
-                secondary_speaker = f"{speaker}_CS"
+                secondary_speaker = f"{speaker}_Fallback"
                 if seg_text2 and any(c.isalnum() for c in seg_text2):
                     results.append((start, end, secondary_speaker, seg_text2, words_data2))
                 else:
@@ -444,7 +444,7 @@ class Wav2ElanTranscriber:
                  # transcribed expects (start, end, speaker, text)
                  transcribed.append((start + start_time, end + start_time, speaker, "", None))
                  if self.secondary_basename:
-                     transcribed.append((start + start_time, end + start_time, f"{speaker}_CS", "", None))
+                     transcribed.append((start + start_time, end + start_time, f"{speaker}_Fallback", "", None))
             
             # Mock times to avoid errors in report
             self.time_records['loading_asr'] = time.time()
@@ -604,12 +604,11 @@ class Wav2ElanTranscriber:
                 word_tier = f"{spk}_words"
                 conf_tier = f"{spk}_conf"
                 for wt, ws, w_start, w_end in wd:
-                    if w_end > w_start:  # guard against zero-duration annotations
-                        oov = "*" if self.word_set is not None and wt not in self.word_set else ""
-                        t_start = int(w_start * 1000)
-                        t_end   = int(w_end   * 1000)
-                        eaf.add_annotation(word_tier, t_start, t_end, wt)
-                        eaf.add_annotation(conf_tier, t_start, t_end, f"{ws}{oov}")
+                    t_start = int(w_start * 1000)
+                    t_end = max(int(w_end * 1000), t_start + 1)  # Ensure at least 1 ms duration
+                    oov = "*" if self.word_set is not None and wt not in self.word_set else ""
+                    eaf.add_annotation(word_tier, t_start, t_end, wt)
+                    eaf.add_annotation(conf_tier, t_start, t_end, f"{ws}{oov}")
         eaf.to_file(output_eaf)
         
         # if not only_segment:

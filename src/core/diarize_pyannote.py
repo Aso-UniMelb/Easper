@@ -16,6 +16,35 @@ def diarize_pyannote(audio_path, num_speakers=1):
 
     print("Loading Pyannote speaker diarization model...")
     import torch
+
+    # Fix PyTorch 2.6+ weights_only default breaking pyannote / pytorch-lightning checkpoint loading
+    _real_torch_load = getattr(torch, "_easper_orig_load", None)
+    if _real_torch_load is None:
+        _real_torch_load = torch.load
+        torch._easper_orig_load = _real_torch_load
+
+    def _safe_torch_load(*args, **kwargs):
+        kwargs["weights_only"] = False
+        try:
+            return _real_torch_load(*args, **kwargs)
+        except TypeError:
+            kwargs.pop("weights_only", None)
+            return _real_torch_load(*args, **kwargs)
+
+    torch.load = _safe_torch_load
+
+    if hasattr(torch.serialization, "add_safe_globals"):
+        try:
+            import torch.torch_version
+            torch.serialization.add_safe_globals([torch.torch_version.TorchVersion])
+        except Exception:
+            pass
+        try:
+            import pyannote.audio.core.task
+            torch.serialization.add_safe_globals([pyannote.audio.core.task.Specifications])
+        except Exception:
+            pass
+
     import torchaudio
     from pyannote.audio import Pipeline
     from pyannote.audio.pipelines.utils.hook import ProgressHook
@@ -34,7 +63,7 @@ def diarize_pyannote(audio_path, num_speakers=1):
     # Run segmentation/diarization
     waveform, sr = torchaudio.load(audio_path)
     with ProgressHook() as hook:
-        output_diarization = pipeline({"waveform": waveform, "sample_rate": sr}, num_speakers=num_speakers, hook=hook)
+        output_diarization = pipeline({"waveform": waveform, "sample_rate": sr}, num_speakers=num_speakers+1, hook=hook)
     
     utterances = []
     for turn, _, speaker in output_diarization.itertracks(yield_label=True):

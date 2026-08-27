@@ -5,6 +5,8 @@ Contains the TranscribeToElanApp class for the transcription GUI.
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
+import sys
+import subprocess
 import shutil
 import threading
 from pydub import AudioSegment
@@ -199,11 +201,12 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         _pmf = ctk.CTkFrame(self.transcription_options_frame, fg_color="transparent")
         _pmf.grid(row=1, column=0, columnspan=2, padx=12, pady=4, sticky="ew")
         
-        ctk.CTkLabel(_pmf, text="Main ASR Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
-        self.asr_model_combobox = ctk.CTkComboBox(_pmf, values=[], width=180)
+        ctk.CTkLabel(_pmf, text="Speech Recognition Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        self.asr_model_combobox = ctk.CTkComboBox(_pmf, values=[], width=180, command=self._on_asr_model_change)
         self.asr_model_combobox.grid(row=0, column=1, padx=(0, 20), sticky="w")
 
-        ctk.CTkLabel(_pmf, text="Tokenizer Language:").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.language_label = ctk.CTkLabel(_pmf, text="Language:")
+        self.language_label.grid(row=0, column=2, padx=(0, 4), sticky="e")
         self.language_combobox = ctk.CTkComboBox(
             _pmf, values=sorted_languages, width=120
         )
@@ -234,7 +237,7 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
 
         # Second language sub-section
         ctk.CTkLabel(
-            self.transcription_options_frame, text="Second Language Transcription (optional)",
+            self.transcription_options_frame, text="Fallback Speech Recognition (optional, helps with multi-language code-switching)",
             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray"
         ).grid(row=4, column=0, columnspan=2, padx=12, pady=(5, 2), sticky="w")
 
@@ -242,13 +245,14 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         _smf = ctk.CTkFrame(self.transcription_options_frame, fg_color="transparent")
         _smf.grid(row=5, column=0, columnspan=2, padx=12, pady=(4, 5), sticky="ew")
 
-        ctk.CTkLabel(_smf, text="Secondary ASR Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
+        ctk.CTkLabel(_smf, text="Fallback Model:").grid(row=0, column=0, padx=(0, 4), sticky="e")
         self.secondary_model_combobox = ctk.CTkComboBox(
-            _smf, values=[], width=180
+            _smf, values=[], width=180, command=self._on_secondary_model_change
         )
         self.secondary_model_combobox.grid(row=0, column=1, padx=(0, 20), sticky="w")
 
-        ctk.CTkLabel(_smf, text="Tokenizer Language:").grid(row=0, column=2, padx=(0, 4), sticky="e")
+        self.secondary_language_label = ctk.CTkLabel(_smf, text="Language:")
+        self.secondary_language_label.grid(row=0, column=2, padx=(0, 4), sticky="e")
         self.secondary_language_combobox = ctk.CTkComboBox(
             _smf, values=sorted_languages, width=120
         )
@@ -274,6 +278,14 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         ctk.CTkLabel(_op, text="Save to:").grid(row=0, column=0, padx=(0, 8), sticky="e")
         self.output_elan_path_entry = ctk.CTkEntry(_op)
         self.output_elan_path_entry.grid(row=0, column=1, sticky="ew")
+        self.open_output_folder_button = ctk.CTkButton(
+            _op, text="📂 Open",
+            width=70, height=28,
+            font=ctk.CTkFont(size=12),
+            fg_color="gray", hover_color="#555",
+            command=self.open_output_folder
+        )
+        self.open_output_folder_button.grid(row=0, column=2, padx=(8, 0), sticky="e")
 
         # Action buttons
         _ab = ctk.CTkFrame(self.process_frame, fg_color="transparent")
@@ -383,7 +395,10 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
 
 
     def on_only_segment_change(self):
-        if self.only_segment_switch.get():
+        models = get_available_models()
+        has_file = bool(getattr(self, "audio_file", "") or getattr(self, "input_eaf_path", None))
+
+        if not models or self.only_segment_switch.get():
             self._current_only_segment = True
             self.transcription_options_frame.grid_remove()
             self.transcription_button.configure(text="Segmentise!")
@@ -392,9 +407,16 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             self.stage3_badge.configure(text="❷ Generating ELAN")
             self.stage_container_frame.grid_columnconfigure(0, weight=70)
             self.stage_container_frame.grid_columnconfigure(4, weight=30)
+            if not models:
+                self.only_segment_switch.select()
+                self.only_segment_switch.configure(state="disabled")
         else:
             self._current_only_segment = False
-            self.transcription_options_frame.grid()
+            self.only_segment_switch.configure(state="normal")
+            if has_file:
+                self.transcription_options_frame.grid()
+            else:
+                self.transcription_options_frame.grid_remove()
             self.transcription_button.configure(text="Transcribe!")
             self.stage2_badge.grid()
             self.stage_arrow_2.grid()
@@ -482,11 +504,18 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             self.asr_model_combobox.set(model_names[0])
             self.secondary_model_combobox.configure(values=["None"] + model_names)
             self.secondary_model_combobox.set("None")
+            self.only_segment_switch.configure(state="normal")
         else:
             self.asr_model_combobox.configure(values=["None"])
             self.asr_model_combobox.set("None")
             self.secondary_model_combobox.configure(values=["None"])
             self.secondary_model_combobox.set("None")
+            self.only_segment_switch.select()
+            self.only_segment_switch.configure(state="disabled")
+        
+        self._on_asr_model_change()
+        self._on_secondary_model_change()
+        self.on_only_segment_change()
 
         # Discover word list .txt files from the word_lists/ folder at project root
         current_dir = os.getcwd()
@@ -549,10 +578,65 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             )
             badge_btn.grid(row=0, column=0)
 
+    def _is_multilingual_whisper(self, model_display_name):
+        """Check if a model is an exact official multilingual Whisper model (e.g. whisper-small, whisper-base)."""
+        if not model_display_name or model_display_name == "None":
+            return False
+        full_path = self._model_path_map.get(model_display_name, model_display_name) if hasattr(self, "_model_path_map") else model_display_name
+        base = os.path.basename(full_path).lower().strip()
+        exact_multilingual = {
+            "whisper-small",
+            "whisper-base",
+            "whisper-tiny",
+            "whisper-medium",
+            "whisper-large",
+            "whisper-large-v1",
+            "whisper-large-v2",
+            "whisper-large-v3",
+            "whisper-large-v3-turbo",
+        }
+        return base in exact_multilingual
+
+    def _on_asr_model_change(self, choice=None):
+        model_choice = self.asr_model_combobox.get()
+        if self._is_multilingual_whisper(model_choice):
+            self.language_label.grid()
+            self.language_combobox.grid()
+        else:
+            self.language_combobox.set("english")
+            self.language_label.grid_remove()
+            self.language_combobox.grid_remove()
+
+    def _on_secondary_model_change(self, choice=None):
+        model_choice = self.secondary_model_combobox.get()
+        if self._is_multilingual_whisper(model_choice):
+            self.secondary_language_label.grid()
+            self.secondary_language_combobox.grid()
+        else:
+            self.secondary_language_combobox.set("english")
+            self.secondary_language_label.grid_remove()
+            self.secondary_language_combobox.grid_remove()
+
     def open_model_download_dialog(self):
         """Open the model download dialog from transcriber UI."""
         from src.ui.launcher import DownloadModelModalDialog
         DownloadModelModalDialog(self, on_complete_callback=self._on_model_downloaded)
+
+    def open_output_folder(self):
+        """Open destination output directory in default file manager."""
+        folder = self.output_elan_path_entry.get().strip() or getattr(self, "output_elan_path", "")
+        if folder and os.path.exists(folder):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(folder)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", folder])
+                else:
+                    subprocess.Popen(["xdg-open", folder])
+            except Exception as e:
+                print(f"Could not open directory {folder}: {e}")
+        else:
+            messagebox.showwarning("Folder Not Found", f"The directory does not exist:\n{folder}")
 
     def _on_model_downloaded(self):
         self.populate_models()
@@ -724,6 +808,13 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         self.input_eaf_path = None  # Reset
 
         if filename.lower().endswith('.eaf'):
+            models = get_available_models()
+            if not models:
+                messagebox.showwarning(
+                    "No ASR Model Available",
+                    "Transcribing an ELAN (.eaf) file requires an ASR model, but no models were found.\n\nPlease download a model first (e.g. Whisper Small) using the button at the top, or select an audio file for segmentation."
+                )
+                return
             self.input_eaf_path = filename
             self.segmentation_options_frame.grid_remove()
             # Handle ELAN file: find .wav or .mp4 in the same directory as the .eaf file
@@ -739,6 +830,7 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             # UI Logic for EAF
             self.only_segment_switch.grid_remove()  # Hide only segment
             self.file_path_label.configure(text=f"EAF: {os.path.basename(filename)}\nAudio: {os.path.basename(self.audio_file)}")
+            self.transcription_options_frame.grid()
         else:
             # Handle Audio file
             self.segmentation_options_frame.grid()
@@ -746,6 +838,7 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             self.input_eaf_path = None
             self.only_segment_switch.grid()  # Show "Only Segment"
             self.file_path_label.configure(text=f"{self.audio_file}")
+            self.on_only_segment_change()
 
         # Common setup
         try:
@@ -754,7 +847,6 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         except Exception:
             pass  # safely ignore if pydub fails to load for display
 
-        self.transcription_options_frame.grid()
         self.output_elan_path = os.path.dirname(self.audio_file)
         self.output_elan_path_entry.delete(0, 'end')
         self.output_elan_path_entry.insert(0, self.output_elan_path)
@@ -837,6 +929,15 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
             segmentation_model = self.segmentation_model_combobox.get()
             only_segment = bool(self.only_segment_switch.get())
             from_elan = None
+
+        if not only_segment:
+            models = get_available_models()
+            if not models or model_name == "None" or not model_name:
+                messagebox.showerror(
+                    "No ASR Model Available",
+                    "No speech recognition model is available for transcription.\n\nPlease download a model or enable 'Segmentation only'."
+                )
+                return
 
         # Reset stage indicators, progress bar, and preview feed
         self._current_only_segment = only_segment
