@@ -11,6 +11,8 @@ Easper is a specialized tool designed to streamline the Automatic Speech Recogni
 - **🚀 Automated Transcription**: Convert audio recordings directly into ELAN (.eaf) format.
 - **👥 Speaker Diarization**: Integrated support for SpeechBrain and Pyannote to distinguish between speakers automatically.
 - **📊 Dataset Generation**: Seamlessly create ASR training datasets from existing ELAN annotations.
+- **🔄 Batch Media Converter**: Fast audio & video extraction to 16 kHz mono WAV (Whisper format), compact MP3 for sharing, or FLAC, with dual-channel stereo splitting.
+- **✂️ Silence Trimmer**: Trim dead air at recording edges or condense internal silences across audio and video files.
 - **🖥️ Dual Interface**: Use the intuitive GUI for ease of use or the powerful CLI for automation.
 - **📦 Portable Design**: Designed to be easy to deploy and use in field conditions.
 
@@ -85,11 +87,27 @@ python src/main.py transcribe -i audio.wav -m user_models/whisper-small -s 2
 python src/main.py dataset -i file.eaf -o ./output -t "Speaker_00,Speaker_01"
 ```
 
+**Batch convert media files to 16 kHz mono WAV, MP3, or FLAC:**
+```bash
+python src/main.py convert -i recording.mp4 -o ./output --split-channels
+```
+
+**Silence Trimmer:**
+```bash
+# Trim leading and trailing dead air:
+python src/main.py trim -i recording.wav -o ./output --mode edges
+
+# Strip all internal silences:
+python src/main.py trim -i recording.wav -o ./output --mode strip
+```
+
 **Get Help:**
 ```bash
 python src/main.py --help
 python src/main.py transcribe --help
 python src/main.py dataset --help
+python src/main.py convert --help
+python src/main.py trim --help
 ```
 ---
 ## 👥 Authors & Citation

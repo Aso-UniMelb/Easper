@@ -113,6 +113,123 @@ def dataset_command(args):
         return 1
 
 
+def convert_command(args):
+    """Handle convert subcommand."""
+    from src.core.media_converter import convert_media_file, is_supported_media_file
+    from pathlib import Path
+    
+    input_files = []
+    for item in args.input:
+        p = Path(item)
+        if p.is_dir():
+            for f in p.rglob("*"):
+                if f.is_file() and is_supported_media_file(str(f)):
+                    input_files.append(str(f))
+        elif p.is_file():
+            input_files.append(str(p))
+        else:
+            print(f"Warning: Path not found: {item}")
+    
+    if not input_files:
+        print("Error: No valid audio or video files found.")
+        return 1
+
+    output_dir = args.output if args.output else None
+    split_channels = args.split_channels
+    output_format = args.format.lower()
+
+    print(f"Converting {len(input_files)} file(s) to 16 kHz mono {output_format.upper()}...")
+
+    success = 0
+    errors = 0
+    for idx, f in enumerate(input_files, 1):
+        print(f"[{idx}/{len(input_files)}] Converting {Path(f).name}...", end="", flush=True)
+        try:
+            generated = convert_media_file(
+                f,
+                output_dir=output_dir,
+                split_channels=split_channels,
+                output_format=output_format
+            )
+            print(f" -> {', '.join(Path(g).name for g in generated)}")
+            success += 1
+        except Exception as e:
+            print(f" -> Error: {e}")
+            errors += 1
+
+    print(f"\nFinished: {success} converted, {errors} failed.")
+    return 0 if errors == 0 else 1
+
+
+def trim_command(args):
+    """Handle trim subcommand."""
+    from src.core.silence_cutter import trim_edges, strip_all_silence
+    from src.core.media_converter import is_supported_media_file
+    from pathlib import Path
+
+    input_files = []
+    for item in args.input:
+        p = Path(item)
+        if p.is_dir():
+            for f in p.rglob("*"):
+                if f.is_file() and is_supported_media_file(str(f)):
+                    input_files.append(str(f))
+        elif p.is_file():
+            input_files.append(str(p))
+        else:
+            print(f"Warning: Path not found: {item}")
+
+    if not input_files:
+        print("Error: No valid audio or video files found.")
+        return 1
+
+    mode = args.mode
+    output_dir = args.output if args.output else None
+    noise_db = args.noise_db
+    min_silence = args.min_silence
+    padding_sec = args.padding
+    fmt = args.format.lower()
+
+    print(f"Running silence processing (mode: {mode}) on {len(input_files)} file(s)...")
+
+    success = 0
+    errors = 0
+    for idx, f in enumerate(input_files, 1):
+        print(f"[{idx}/{len(input_files)}] Processing {Path(f).name}...", end="", flush=True)
+        try:
+            if mode == "edges":
+                res = trim_edges(
+                    f, output_dir=output_dir, noise_threshold_db=noise_db,
+                    min_silence_sec=min_silence, padding_sec=padding_sec, output_format=fmt
+                )
+            else:  # strip
+                res = strip_all_silence(
+                    f, output_dir=output_dir, noise_threshold_db=noise_db,
+                    min_silence_sec=min_silence, padding_sec=padding_sec, output_format=fmt
+                )
+
+            if res.get("status") == "no_speech":
+                print(" -> No speech detected above threshold.")
+            elif res.get("output_files"):
+                outs = res["output_files"]
+                if len(outs) <= 2:
+                    print(f" -> {', '.join(Path(o).name for o in outs)}")
+                else:
+                    print(f" -> Generated {len(outs)} chunk(s) in {Path(outs[0]).parent.name}")
+                if res.get("csv_file"):
+                    print(f"    Timestamp CSV: {Path(res['csv_file']).name}")
+                success += 1
+            else:
+                print(" -> Failed.")
+                errors += 1
+        except Exception as e:
+            print(f" -> Error: {e}")
+            errors += 1
+
+    print(f"\nFinished: {success} successful, {errors} failed.")
+    return 0 if errors == 0 else 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="Easper",
@@ -199,6 +316,79 @@ def main():
         help="Comma-separated list of tier names to include (default: all)"
     )
     
+    # Convert subcommand
+    convert_parser = subparsers.add_parser(
+        "convert",
+        help="Batch convert audio/video files to 16 kHz mono WAV"
+    )
+    convert_parser.add_argument(
+        "--input", "-i",
+        nargs="+",
+        required=True,
+        help="Input audio/video file(s) or folder(s)"
+    )
+    convert_parser.add_argument(
+        "--output", "-o",
+        help="Output folder (default: same folder as input file)"
+    )
+    convert_parser.add_argument(
+        "--split-channels", "-s",
+        action="store_true",
+        help="Split 2-channel (stereo) files into separate mono tracks (_ch1 & _ch2)"
+    )
+    convert_parser.add_argument(
+        "--format", "-f",
+        choices=["wav", "mp3", "flac"],
+        default="wav",
+        help="Output audio format: wav (16-bit PCM), mp3 (compact sharing), flac (lossless). Default: wav"
+    )
+
+    # Trim subcommand
+    trim_parser = subparsers.add_parser(
+        "trim",
+        help="Silence trimmer and VAD utterance cutter"
+    )
+    trim_parser.add_argument(
+        "--input", "-i",
+        nargs="+",
+        required=True,
+        help="Input audio/video file(s) or folder(s)"
+    )
+    trim_parser.add_argument(
+        "--mode", "-m",
+        choices=["edges", "strip"],
+        default="edges",
+        help="Mode: 'edges' (trim start/end dead air) or 'strip' (condense all pauses). Default: edges"
+    )
+    trim_parser.add_argument(
+        "--output", "-o",
+        help="Output directory"
+    )
+    trim_parser.add_argument(
+        "--noise-db",
+        type=float,
+        default=-40.0,
+        help="Silence threshold in dB (default: -40.0)"
+    )
+    trim_parser.add_argument(
+        "--min-silence",
+        type=float,
+        default=0.8,
+        help="Minimum silence duration in seconds to detect (default: 0.8)"
+    )
+    trim_parser.add_argument(
+        "--padding",
+        type=float,
+        default=0.25,
+        help="Speech boundary padding margin in seconds (default: 0.25)"
+    )
+    trim_parser.add_argument(
+        "--format", "-f",
+        choices=["wav", "mp3", "flac"],
+        default="wav",
+        help="Output audio format: wav, mp3, or flac. Default: wav"
+    )
+
     args = parser.parse_args()
     
     if args.command is None:
@@ -209,6 +399,10 @@ def main():
         return transcribe_command(args)
     elif args.command == "dataset":
         return dataset_command(args)
+    elif args.command == "convert":
+        return convert_command(args)
+    elif args.command == "trim":
+        return trim_command(args)
     
     return 0
 

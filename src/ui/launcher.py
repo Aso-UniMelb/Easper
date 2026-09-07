@@ -279,7 +279,7 @@ class UpdateModalDialog(ctk.CTkToplevel):
         self.update_button.configure(state="disabled", text="Updating...")
         self.progress_bar.grid()
         self.progress_bar.set(0.05)
-        self.status_label.configure(text="Preparing update download...", text_color=None)
+        self.status_label.configure(text="Preparing update download...", text_color=("gray10", "gray90"))
 
         def _worker():
             try:
@@ -519,6 +519,56 @@ class LauncherApp(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         )
         transcriber_button.grid(row=3, column=0, pady=(0, 14))
 
+        # ── UTILITIES BOX: Media Utilities (Below Transcriber) ────────
+        utilities_box = ctk.CTkFrame(
+            content_frame,
+            corner_radius=14,
+            border_width=1,
+            border_color=("gray75", "gray30"),
+            fg_color=("gray92", "gray17")
+        )
+        utilities_box.grid(row=2, column=0, columnspan=2, padx=10, pady=(4, 6), sticky="ew")
+        utilities_box.grid_columnconfigure(0, weight=1)
+
+        box_content = ctk.CTkFrame(utilities_box, fg_color="transparent")
+        box_content.grid(row=0, column=0, pady=8)
+
+        util_title = ctk.CTkLabel(
+            box_content,
+            text="Utilities:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("gray30", "gray70")
+        )
+        util_title.grid(row=0, column=0, padx=(0, 10), pady=2)
+
+        self.converter_btn = ctk.CTkButton(
+            box_content,
+            text="Batch Media Converter",
+            font=ctk.CTkFont(size=12),
+            height=30,
+            fg_color=("gray80", "gray26"),
+            hover_color=("gray70", "gray34"),
+            text_color=("gray10", "gray95"),
+            border_width=1,
+            border_color=("gray70", "gray38"),
+            command=self.show_media_converter
+        )
+        self.converter_btn.grid(row=0, column=1, padx=(0, 6), pady=2)
+
+        self.silence_cutter_btn = ctk.CTkButton(
+            box_content,
+            text="Silence Trimmer",
+            font=ctk.CTkFont(size=12),
+            height=30,
+            fg_color=("gray80", "gray26"),
+            hover_color=("gray70", "gray34"),
+            text_color=("gray10", "gray95"),
+            border_width=1,
+            border_color=("gray70", "gray38"),
+            command=self.show_silence_cutter
+        )
+        self.silence_cutter_btn.grid(row=0, column=2, padx=(0, 0), pady=2)
+
         # Footer with version, check for updates, and theme toggle
         footer_frame = ctk.CTkFrame(self.current_frame, fg_color="transparent")
         footer_frame.grid(row=2, column=0, pady=(0, 15), padx=30, sticky="ew")
@@ -534,7 +584,7 @@ class LauncherApp(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
         self.check_updates_btn = ctk.CTkButton(
             footer_frame,
-            text="🔄 Check for Updates",
+            text="Check for Updates",
             font=ctk.CTkFont(size=12),
             width=130,
             height=28,
@@ -661,6 +711,30 @@ class LauncherApp(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.current_frame = ElanToASRApp(self, back_callback=self.show_main_menu)
         self.current_frame.grid(row=0, column=0, sticky="nsew", rowspan=2, padx=10, pady=10)
         self.title("Easper - Dataset Generator")
+
+    def show_media_converter(self):
+        """Show the batch media converter UI."""
+        if self.current_frame:
+            self.current_frame.destroy()
+        
+        # Import here to avoid circular imports
+        from src.ui.converter_ui import BatchMediaConverterApp
+        
+        self.current_frame = BatchMediaConverterApp(self, back_callback=self.show_main_menu)
+        self.current_frame.grid(row=0, column=0, sticky="nsew", rowspan=2, padx=10, pady=10)
+        self.title(f"Easper v{self.version} - Batch Media Converter")
+
+    def show_silence_cutter(self):
+        """Show the silence trimmer UI."""
+        if self.current_frame:
+            self.current_frame.destroy()
+        
+        # Import here to avoid circular imports
+        from src.ui.silence_cutter_ui import SilenceTrimmerApp
+        
+        self.current_frame = SilenceTrimmerApp(self, back_callback=self.show_main_menu)
+        self.current_frame.grid(row=0, column=0, sticky="nsew", rowspan=2, padx=10, pady=10)
+        self.title(f"Easper v{self.version} - Silence Trimmer")
 
     def open_colab_notebook(self):
         """Open the Easper Google Colab fine-tuning notebook in the browser."""

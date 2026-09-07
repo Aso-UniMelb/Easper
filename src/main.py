@@ -10,6 +10,11 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Suppress third-party UserWarnings (e.g. torchaudio backend deprecation in pyannote)
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module=r"torchaudio(\..*)?")
+warnings.filterwarnings("ignore", category=UserWarning, module=r"pyannote(\..*)?")
+
 # Global PyTorch 2.6+ backward compatibility patch for third-party checkpoints (pyannote/lightning/speechbrain)
 try:
     import torch
