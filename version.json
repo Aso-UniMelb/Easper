@@ -1,6 +1,6 @@
 {
-  "version": "0.3.1",
-  "release_date": "2026-08-27",
-  "changelog": "Third Beta release: UI Redesigned",
+  "version": "0.3.3",
+  "release_date": "2026-09-07",
+  "changelog": "Added Batch Media Converter and Silence Trimmer",
   "min_python": "3.11"
 }

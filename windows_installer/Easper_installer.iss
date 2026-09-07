@@ -1,5 +1,5 @@
 #define MyAppName "Easper"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.3.3"
 #define MyAppPublisher "Aso Mahmudi"
 #define MyAppURL "https://github.com/Aso-UniMelb/Easper"
 
