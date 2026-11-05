@@ -201,7 +201,10 @@ class Wav2ElanTranscriber:
                 max_probs, _ = torch.max(probs, dim=-1)
                 avg_prob = torch.mean(max_probs).item()
                 confidence_score = max(0, min(9, int(round(avg_prob * 9))))
-                seg_text = f"[{confidence_score}] {text}" if text else ""
+                if self.output_confidence:
+                    seg_text = f"[{confidence_score}] {text}" if text else ""
+                else:
+                    seg_text = text if text else ""
                 words_data = None  # no word-level tier for xls/mms
             else:
                 seg_text = ""
@@ -326,8 +329,11 @@ class Wav2ElanTranscriber:
                     max_probs, _ = torch.max(probs, dim=-1)
                     avg_prob2 = torch.mean(max_probs).item()
                     confidence_score2 = max(0, min(9, int(round(avg_prob2 * 9))))
-                    seg_text2 = f"[{confidence_score2}] {text2}" if text2 else ""
-                    words_data2 = None
+                    if self.output_confidence:
+                        seg_text2 = f"[{confidence_score2}] {text2}" if text2 else ""
+                    else:
+                        seg_text2 = text2 if text2 else ""
+                    words_data2 = None  # no word-level tier for xls/mms
                 else:
                     seg_text2 = ""
                     words_data2 = None
