@@ -11,6 +11,7 @@ import shutil
 import threading
 from pydub import AudioSegment
 import re
+import math
 
 from src.core.transcriber import Wav2ElanTranscriber
 from src.utils.paths import get_temp_dir, list_asr_models
@@ -643,6 +644,7 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
 
     def ms_to_min_sec(self, milliseconds):
         ''' convert milliseconds to MM:SS format string (for display label) '''
+        milliseconds = math.ceil(milliseconds)
         total_seconds = milliseconds // 1000
         minutes = total_seconds // 60
         seconds = total_seconds % 60
@@ -652,6 +654,7 @@ class TranscribeToElanApp(ctk.CTkScrollableFrame):
         """Convert seconds to HH:MM:SS string."""
         if seconds is None:
             return ""
+        seconds = math.ceil(seconds)
         m, s = divmod(seconds, 60)
         h, m = divmod(m, 60)
         return f"{int(h):02d}:{int(m):02d}:{int(s):02d}"
